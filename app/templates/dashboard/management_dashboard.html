@@ -972,6 +972,17 @@ document.addEventListener('DOMContentLoaded',function(){
         if(key==='not-stamped'){
           setKpiValue('not-stamped',items.length);
         }
+        // Filtrer les factures du mois courant pour la liste 'invoices'
+        if(key==='invoices'){
+          const now=new Date();
+          const curYear=now.getFullYear();
+          const curMonth=now.getMonth()+1;
+          items=items.filter(it=>{
+            if(!it.date_process) return false;
+            const d=new Date(it.date_process);
+            return d.getFullYear()===curYear && (d.getMonth()+1)===curMonth;
+          });
+        }
       }catch(err){
         listTableBody.innerHTML=`
           <tr>
