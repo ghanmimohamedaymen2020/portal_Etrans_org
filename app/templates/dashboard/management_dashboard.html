@@ -4,1540 +4,1515 @@
 
 {% block css %}
 <style>
-  :root {
-    --color-primary: #2c3e50;
-    --color-secondary: #3498db;
-    --color-success: #27ae60;
-    --color-warning: #e67e22;
-    --color-danger: #e74c3c;
-    --color-info: #3498db;
-    --color-light: #f8f9fa;
-    --color-dark: #2c3e50;
-    --color-border: #e0e0e0;
-    --border-radius: 10px;
-    --box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-    --transition: all 0.3s ease;
-  }
+:root {
+  --color-primary: #2c3e50;
+  --color-secondary: #3498db;
+  --color-success: #27ae60;
+  --color-warning: #e67e22;
+  --color-danger: #e74c3c;
+  --color-info: #3498db;
+  --color-light: #f8f9fa;
+  --color-dark: #2c3e50;
+  --color-border: #e0e0e0;
+  --border-radius: 10px;
+  --box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+  --transition: all 0.3s ease;
+}
 
-  main {
-    max-width: 1400px;
-    margin: 0 auto;
-    background: white;
-    border-radius: 15px;
-    box-shadow: var(--box-shadow);
-    padding: 30px;
-  }
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 15px;
+  box-shadow: var(--box-shadow);
+  padding: 8px 24px 0 24px;
+  height: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
-  body.list-only main {
-    max-width: 100%;
-    width: 100%;
-  }
+body.list-only main {
+  max-width: 100%;
+  width: 100%;
+  min-height: calc(100vh - 81px);
+  height: calc(100vh - 81px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow: hidden;
+}
 
-  /* Ensure lists occupy full page width when in list-only mode */
-  body.list-only .list-section {
-    display: block;
-    width: 100%;
-    margin: 0;
-    padding: 18px;
-    box-shadow: none;
-    border: none;
-    border-radius: 0;
-  }
+body.list-only .list-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  padding: 18px;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
 
-  body.list-only main {
-    padding: 12px 18px;
-  }
+body.list-only .list-section table {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  margin-bottom: 0;
+  overflow: hidden;
+}
 
-  /* Remove extra vertical whitespace and make lists fill available height */
-  body.list-only .navbar-spacer { display: none !important; }
-  body.list-only main { padding: 0 !important; }
-  body.list-only .list-section { padding: 0 12px 6px 12px !important; margin-bottom: 0 !important; }
-  body.list-only .table-responsive { max-height: calc(100vh - 140px); overflow: auto; }
-  body.list-only main .chart-wrapper, body.list-only .chart-container { display: none !important; }
+body.list-only main {
+  padding: 12px 18px;
+}
 
   .dashboard-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
-    padding-bottom: 20px;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
     border-bottom: 2px solid var(--color-border);
   }
 
-  .welcome-section h1 {
-    color: var(--color-primary);
-    font-size: 1.8rem;
-    margin-bottom: 5px;
-  }
+.welcome-section h1 {
+  color: var(--color-primary);
+  font-size: 1.8rem;
+  margin-bottom: 5px;
+}
 
-  .welcome-message {
-    color: #666;
-    font-size: 1.1rem;
-  }
+.welcome-message {
+  color: #666;
+  font-size: 1.1rem;
+}
 
-  .kpi-section {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    margin: 25px 0 20px;
-  }
+.kpi-section {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 8px 0 8px;
+}
 
-  .kpi-card {
-    background: #fff;
-    border-radius: var(--border-radius);
-    padding: 20px;
-    box-shadow: var(--box-shadow);
-    border-left: 5px solid var(--color-primary);
-    transition: var(--transition);
-    cursor: pointer;
-    user-select: none;
-  }
+.kpi-card {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 8px 10px;
+  box-shadow: var(--box-shadow);
+  border-left: 5px solid var(--color-primary);
+  transition: var(--transition);
+  cursor: pointer;
+  user-select: none;
+}
 
-  .kpi-card:hover {
-    transform: translateY(-4px);
-  }
+.kpi-card:hover {
+  transform: translateY(-4px);
+}
 
-  .kpi-card.active {
-    border-left-width: 8px;
-  }
+.kpi-card.active {
+  border-left-width: 8px;
+}
 
-  .kpi-title {
-    font-size: 0.95rem;
-    color: #666;
-    margin-bottom: 10px;
-    font-weight: 600;
-  }
+.kpi-title {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
 
-  .kpi-value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 10px 0;
-  }
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 4px 0;
+}
 
-  .kpi-sub {
-    font-size: 0.85rem;
-    color: #777;
-  }
+.kpi-sub {
+  font-size: 0.85rem;
+  color: #777;
+}
 
-  .list-section {
-    display: none;
-    background: #fff;
-    border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
-    padding: 20px;
-    margin-bottom: 25px;
-    border: 1px solid var(--color-border);
-  }
+.list-section {
+  display: none;
+  background: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border);
+}
 
-  body.list-only .list-section {
-    display: block;
-  }
+body.list-only .list-section {
+  display: block;
+}
 
-  .list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    gap: 12px;
-  }
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 4px;
+}
 
-  .list-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
-  .list-loading {
-    display: none;
-    font-size: 0.85rem;
-    color: #666;
-    align-items: center;
-    gap: 6px;
-  }
+.list-loading {
+  display: none;
+  font-size: 0.85rem;
+  color: #666;
+  align-items: center;
+  gap: 2px;
+}
 
-  .list-loading.visible {
-    display: inline-flex;
-  }
+.list-loading.visible {
+  display: inline-flex;
+}
 
-  .list-page-size {
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 0.9rem;
-    background: #fff;
-  }
+.list-page-size {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  background: #fff;
+}
 
-  .list-pagination {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
+.list-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
-  .list-page-btn {
-    border: 1px solid var(--color-border);
-    background: #fff;
-    border-radius: 8px;
-    padding: 7px 10px;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
+.list-page-btn {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
 
-  .list-page-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+.list-page-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
-  .list-page-info {
-    font-size: 0.85rem;
-    color: #666;
-    min-width: 90px;
-    text-align: center;
-  }
+.list-page-info {
+  font-size: 0.85rem;
+  color: #666;
+  min-width: 90px;
+  text-align: center;
+}
 
-  .list-search {
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-    min-width: 220px;
-  }
+.list-search {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  min-width: 220px;
+}
 
-  .list-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: var(--color-primary);
-  }
+.list-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
 
-  .list-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.95rem;
-  }
+.list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
 
-  .list-table th,
-  .list-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--color-border);
-    text-align: left;
-  }
+.list-table th,
+.list-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
 
-  .list-table th {
-    color: #666;
-    font-weight: 600;
-    background: #f8f9fa;
-  }
+.list-table th {
+  color: #666;
+  font-weight: 600;
+  background: #f8f9fa;
+}
 
-  /* Make table headers sticky so they remain visible when scrolling */
-  .table-responsive {
-    max-height: 60vh;
-    overflow: auto;
-  }
+.table-responsive {
+  max-height: 40vh;
+  overflow: auto;
+}
 
-  .list-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    background: #f8f9fa;
-  }
+.list-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8f9fa;
+}
 
-  .column-toggle {
-    position: relative;
-  }
+.column-toggle {
+  position: relative;
+}
 
-  .column-toggle-btn {
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-    background: #fff;
-    cursor: pointer;
-  }
+.column-toggle-btn {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  background: #fff;
+  cursor: pointer;
+}
 
-  .column-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    background: #fff;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    box-shadow: var(--box-shadow);
-    padding: 10px;
-    min-width: 220px;
-    max-height: 260px;
-    overflow: auto;
-    display: none;
-    z-index: 5;
-  }
+.column-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  padding: 4px;
+  min-width: 220px;
+  max-height: 260px;
+  overflow: auto;
+  display: none;
+  z-index: 5;
+}
 
-  .column-menu.visible {
-    display: block;
-  }
+.column-menu.visible {
+  display: block;
+}
 
-  .column-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
-  }
+.column-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 2px;
+  font-size: 0.9rem;
+}
 
-  .hidden-col {
-    display: none;
-  }
+.hidden-col {
+  display: none;
+}
 
-  .status-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    font-weight: 600;
-  }
+.status-badge {
+  display: inline-block;
+  padding: 2px 4px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
 
-  .status-danger { background: rgba(231, 76, 60, 0.12); color: #e74c3c; }
-  .status-success { background: rgba(39, 174, 96, 0.12); color: #27ae60; }
-  .status-warning { background: rgba(230, 126, 34, 0.12); color: #e67e22; }
-  .status-info { background: rgba(52, 152, 219, 0.12); color: #3498db; }
+.status-danger { background:rgba(231,76,60,0.12); color:#e74c3c; }
+.status-success { background:rgba(39,174,96,0.12); color:#27ae60; }
+.status-warning { background:rgba(230,126,34,0.12); color:#e67e22; }
+.status-info { background:rgba(52,152,219,0.12); color:#3498db; }
 
-  .charts-section {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 30px;
-    margin-top: 10px;
-  }
+.charts-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
 
-  body.list-only .charts-section,
-  body.list-only .kpi-section,
-  body.list-only .dashboard-header {
-    display: none;
-  }
+body.list-only .charts-section,
+body.list-only .kpi-section,
+body.list-only .dashboard-header {
+  display: none;
+}
 
-  body.chart-only .list-section,
-  body.chart-only .charts-section,
-  body.chart-only .kpi-section,
-  body.chart-only .dashboard-header {
-    display: none;
-  }
+body.chart-only .list-section,
+body.chart-only .charts-section,
+body.chart-only .kpi-section,
+body.chart-only .dashboard-header {
+  display: none;
+}
 
-  body.chart-only .currency-container {
-    display: block;
-  }
+body.chart-only .currency-container {
+  display: block;
+}
 
-  body.chart-only.show-chart-list .list-section {
-    display: block;
-  }
+body.chart-only.show-chart-list .list-section {
+  display: block;
+}
 
-  .chart-container {
-    background: white;
-    border-radius: var(--border-radius);
-    padding: 25px;
-    box-shadow: var(--box-shadow);
-  }
+.chart-container {
+  background: white;
+  border-radius: var(--border-radius);
+  padding: 25px;
+  box-shadow: var(--box-shadow);
+}
 
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
 
-  .chart-header h2 {
-    color: var(--color-primary);
-    font-size: 1.3rem;
-  }
+.chart-header h2 {
+  color: var(--color-primary);
+  font-size: 1.3rem;
+}
 
-  .chart-wrapper {
-    position: relative;
-    height: 300px;
-    width: 100%;
-  }
+.chart-wrapper {
+  position: relative;
+  height: 300px;
+  width: 100%;
+}
 
-  .currency-container {
-    display: none;
-    margin-top: 20px;
-  }
+.currency-container {
+  display: none;
+  margin-top: 20px;
+}
 
-  .currency-container.visible {
-    display: block;
-  }
+.currency-container.visible {
+  display: block;
+}
 
-  .devise-commercial-summary {
-    margin-top: 20px;
-  }
+.devise-commercial-summary {
+  margin-top: 20px;
+}
 
-  .devise-commercial-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
+.devise-commercial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
 
-  .devise-commercial-header h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    color: var(--color-primary);
-  }
+.devise-commercial-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--color-primary);
+}
 
-  .devise-commercial-header .filter-label {
-    color: #6c757d;
-    font-size: 0.9rem;
-  }
+.devise-commercial-header .filter-label {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
 
-  .devise-commercial-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.92rem;
-  }
+.devise-commercial-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
 
-  .devise-commercial-table th,
-  .devise-commercial-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid #eef1f4;
-    text-align: left;
-  }
+.devise-commercial-table th,
+.devise-commercial-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef1f4;
+  text-align: left;
+}
 
-  .devise-commercial-table th {
-    font-weight: 600;
-    color: #3d4c63;
-    background: #f7f9fc;
-  }
+.devise-commercial-table th {
+  font-weight: 600;
+  color: #3d4c63;
+  background: #f7f9fc;
+}
 
-  .devise-commercial-table .commercial-link {
-    color: #3498db;
-    text-decoration: underline;
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
-  }
+.devise-commercial-table .commercial-link {
+  color: #3498db;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
 
-  .activity-list {
-    margin-top: 20px;
-  }
+.activity-list {
+  margin-top: 20px;
+}
 
-  .activity-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--color-border);
-    font-size: 0.95rem;
-  }
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
 
-  .activity-item:last-child {
-    border-bottom: none;
-  }
+.activity-item:last-child {
+  border-bottom: none;
+}
 
-  .activity-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+.activity-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-  .activity-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-  }
+.activity-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
 
-  .clickable-row {
-    cursor: pointer;
-  }
+.clickable-row {
+  cursor: pointer;
+}
 
-  .clickable-row:hover {
-    background: rgba(52, 152, 219, 0.08);
-  }
+.clickable-row:hover {
+  background: rgba(52,152,219,0.08);
+}
 
-  @media (max-width: 992px) {
-    .charts-section {
-      grid-template-columns: 1fr;
-    }
-    .kpi-section {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
+@media (max-width: 992px) {
+  .charts-section { grid-template-columns:1fr; }
+  .kpi-section { grid-template-columns:repeat(2,1fr); }
+}
 
-  @media (max-width: 576px) {
-    .kpi-section {
-      grid-template-columns: 1fr;
-    }
-    .revenue-grid {
-      grid-template-columns: 1fr;
-    }
-  }
+@media (max-width: 576px) {
+  .kpi-section { grid-template-columns:1fr; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-  <div class="dashboard-header">
-    <div class="welcome-section">
-      <h1>Dashboard management</h1>
-      <p class="welcome-message">Bonjour <strong>{{ current_user.username }}</strong></p>
-    </div>
+<div class="dashboard-header">
+  <div class="welcome-section">
+    <h1>Dashboard management</h1>
+    <p class="welcome-message">Bonjour <strong>{{ current_user.username }}</strong></p>
   </div>
+</div>
 
-  <div class="kpi-section">
-    <div class="kpi-card" data-key="generated" style="border-left-color: var(--color-info);">
-      <div class="kpi-title">Total marge sur fret</div>
-      <div class="kpi-value">420</div>
-      <div class="kpi-sub">Ce mois</div>
-    </div>
-    <div class="kpi-card" data-key="not-stamped" style="border-left-color: var(--color-danger);">
-      <div class="kpi-title">Avis non timbrés</div>
-      <div class="kpi-value" data-kpi-value="not-stamped">37</div>
-      <div class="kpi-sub">À traiter</div>
-    </div>
-    <div class="kpi-card" data-key="not-withdrawn" style="border-left-color: var(--color-warning);">
-      <div class="kpi-title">Marchandises non retirées</div>
-      <div class="kpi-value">19</div>
-      <div class="kpi-sub">En attente</div>
-    </div>
-    <div class="kpi-card" data-key="invoices" style="border-left-color: var(--color-success);">
-      <div class="kpi-title">Factures (mois)</div>
-      <div class="kpi-value" data-kpi-value="invoices">0</div>
-      <div class="kpi-sub">Liste vide</div>
-    </div>
+<div class="kpi-section">
+  <div class="kpi-card" data-key="generated" style="border-left-color:var(--color-info);">
+    <div class="kpi-title">Total marge sur fret</div>
+    <div class="kpi-value">420</div>
+    <div class="kpi-sub">Ce mois</div>
   </div>
-
-  <div class="charts-section">
-    <div class="chart-container">
-      <div class="chart-header">
-        <h2>Chiffre d’affaires mensuel (histogramme)</h2>
-        <span class="text-muted">Cliquez une barre pour voir les factures</span>
-      </div>
-      <div class="chart-wrapper">
-        <canvas id="barChart"></canvas>
-      </div>
-    </div>
-
-    <div class="chart-container">
-      <h2>Chiffre d’affaires par activité (mois)</h2>
-      <div class="chart-wrapper">
-        <canvas id="activityChart"></canvas>
-      </div>
-      <div class="activity-list">
-        <div class="activity-item">
-          <div class="activity-name">
-            <span class="activity-dot" style="background:#3498db"></span>
-            <span>Timbrage</span>
-          </div>
-          <span data-activity-value="timbrage">0</span>
-        </div>
-        <div class="activity-item">
-          <div class="activity-name">
-            <span class="activity-dot" style="background:#2ecc71"></span>
-            <span>Magasinage</span>
-          </div>
-          <span data-activity-value="magasinage">0</span>
-        </div>
-        <div class="activity-item">
-          <div class="activity-name">
-            <span class="activity-dot" style="background:#f39c12"></span>
-            <span>Agent</span>
-          </div>
-          <span data-activity-value="agent">0</span>
-        </div>
-        <div class="activity-item">
-          <div class="activity-name">
-            <span class="activity-dot" style="background:#e74c3c"></span>
-            <span>Surestarie</span>
-          </div>
-          <span data-activity-value="surestarie">0</span>
-        </div>
-      </div>
-    </div>
+  <div class="kpi-card" data-key="not-stamped" style="border-left-color:var(--color-danger);">
+    <div class="kpi-title">Avis non timbrés</div>
+    <div class="kpi-value" data-kpi-value="not-stamped">37</div>
+    <div class="kpi-sub">À traiter</div>
   </div>
+  <div class="kpi-card" data-key="not-withdrawn" style="border-left-color:var(--color-warning);">
+    <div class="kpi-title">Marchandises non retirées</div>
+    <div class="kpi-value">19</div>
+    <div class="kpi-sub">En attente</div>
+  </div>
+  <div class="kpi-card" data-key="invoices" style="border-left-color:var(--color-success);">
+    <div class="kpi-title">Factures (mois)</div>
+    <div class="kpi-value" data-kpi-value="invoices">0</div>
+    <div class="kpi-sub">Liste vide</div>
+  </div>
+</div>
 
-  <div class="chart-container currency-container" id="currency-container">
+<div class="charts-section">
+  <div class="chart-container">
     <div class="chart-header">
-      <h2>Marge sur fret par devise</h2>
+      <h2>Chiffre d'affaires mensuel (histogramme)</h2>
+      <span class="text-muted">Cliquez une barre pour voir les factures</span>
     </div>
     <div class="chart-wrapper">
-      <canvas id="deviseChart"></canvas>
-    </div>
-    <div class="devise-commercial-summary">
-      <div class="devise-commercial-header">
-        <div>
-          <h3 id="devise-commercial-title">Totaux par commercial</h3>
-          <div class="filter-label" id="devise-commercial-filter"></div>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="devise-commercial-table">
-          <thead>
-            <tr>
-              <th>Devise</th>
-              <th>Commercial</th>
-              <th>Total achat</th>
-              <th>Total vente</th>
-              <th>Marge</th>
-            </tr>
-          </thead>
-          <tbody id="devise-commercial-body"></tbody>
-        </table>
-      </div>
+      <canvas id="barChart"></canvas>
     </div>
   </div>
 
-  <div class="list-section" id="list-section" aria-live="polite">
-    <div class="list-header">
-      <div class="list-title" id="list-title">Liste</div>
-      <div class="list-actions">
-        <button type="button" class="list-page-btn" id="list-back" style="display:none;">Retour</button>
-        <select class="list-page-size" id="list-page-size">
-          <option value="10">10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-          <option value="0">Tous</option>
-        </select>
-        <div class="list-pagination">
-          <button type="button" class="list-page-btn" id="list-page-prev">Précédent</button>
-          <span class="list-page-info" id="list-page-info"></span>
-          <button type="button" class="list-page-btn" id="list-page-next">Suivant</button>
+  <div class="chart-container">
+    <h2>Chiffre d'affaires par activité (mois)</h2>
+    <div class="chart-wrapper">
+      <canvas id="activityChart"></canvas>
+    </div>
+    <div class="activity-list">
+      <div class="activity-item">
+        <div class="activity-name">
+          <span class="activity-dot" style="background:#3498db"></span>
+          <span>Timbrage</span>
         </div>
-        <div class="column-toggle">
-          <button type="button" class="column-toggle-btn" id="column-toggle-btn">Colonnes</button>
-          <div class="column-menu" id="column-menu"></div>
+        <span data-activity-value="timbrage">0</span>
+      </div>
+      <div class="activity-item">
+        <div class="activity-name">
+          <span class="activity-dot" style="background:#2ecc71"></span>
+          <span>Magasinage</span>
         </div>
-        <span class="list-loading" id="list-loading">
-          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-          Chargement...
-        </span>
-        <input type="text" class="list-search" id="list-search" placeholder="Rechercher...">
-        <span class="text-muted" id="list-count"></span>
+        <span data-activity-value="magasinage">0</span>
+      </div>
+      <div class="activity-item">
+        <div class="activity-name">
+          <span class="activity-dot" style="background:#f39c12"></span>
+          <span>Agent</span>
+        </div>
+        <span data-activity-value="agent">0</span>
+      </div>
+      <div class="activity-item">
+        <div class="activity-name">
+          <span class="activity-dot" style="background:#e74c3c"></span>
+          <span>Surestarie</span>
+        </div>
+        <span data-activity-value="surestarie">0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="chart-container currency-container" id="currency-container">
+  <div class="chart-header">
+    <h2>Marge sur fret par devise</h2>
+  </div>
+  <div class="chart-wrapper">
+    <canvas id="deviseChart"></canvas>
+  </div>
+  <div class="devise-commercial-summary">
+    <div class="devise-commercial-header">
+      <div>
+        <h3 id="devise-commercial-title">Totaux par commercial</h3>
+        <div class="filter-label" id="devise-commercial-filter"></div>
       </div>
     </div>
     <div class="table-responsive">
-      <table class="list-table" id="list-table">
+      <table class="devise-commercial-table">
         <thead>
-          <tr id="list-header-row"></tr>
+          <tr>
+            <th>Devise</th>
+            <th>Commercial</th>
+            <th>Total achat</th>
+            <th>Total vente</th>
+            <th>Marge</th>
+          </tr>
         </thead>
-        <tbody></tbody>
+        <tbody id="devise-commercial-body"></tbody>
       </table>
     </div>
   </div>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const listSection = document.getElementById('list-section');
-      const listTitle = document.getElementById('list-title');
-      const listCount = document.getElementById('list-count');
-      const listTableBody = document.querySelector('#list-table tbody');
-      const listHeaderRow = document.getElementById('list-header-row');
-      const listSearch = document.getElementById('list-search');
-      const listPageSize = document.getElementById('list-page-size');
-      const listPagePrev = document.getElementById('list-page-prev');
-      const listPageNext = document.getElementById('list-page-next');
-      const listPageInfo = document.getElementById('list-page-info');
-      const listLoading = document.getElementById('list-loading');
-      const listBack = document.getElementById('list-back');
-      const columnToggleBtn = document.getElementById('column-toggle-btn');
-      const columnMenu = document.getElementById('column-menu');
-      const currencyContainer = document.getElementById('currency-container');
-      const deviseChartCanvas = document.getElementById('deviseChart');
-      const deviseCommercialBody = document.getElementById('devise-commercial-body');
-      const deviseCommercialFilter = document.getElementById('devise-commercial-filter');
-      let currentListKey = null;
-      let currentItems = [];
-      let currentColumns = [];
-      let hiddenColumns = new Set();
-      let currentPage = 1;
-      let listMode = 'summary';
-      let commercialFilter = null;
-      let deviseChart = null;
+<div class="list-section" id="list-section" aria-live="polite">
+  <div class="list-header">
+    <div class="list-title" id="list-title">Liste</div>
+    <div class="list-actions">
+      <button type="button" class="list-page-btn" id="list-back" style="display:none;">Retour</button>
+      <select class="list-page-size" id="list-page-size">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="0">Tous</option>
+      </select>
+      <div class="list-pagination">
+        <button type="button" class="list-page-btn" id="list-page-prev">Précédent</button>
+        <span class="list-page-info" id="list-page-info"></span>
+        <button type="button" class="list-page-btn" id="list-page-next">Suivant</button>
+      </div>
+      <div class="column-toggle">
+        <button type="button" class="column-toggle-btn" id="column-toggle-btn">Colonnes</button>
+        <div class="column-menu" id="column-menu"></div>
+      </div>
+      <span class="list-loading" id="list-loading">
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        Chargement...
+      </span>
+      <input type="text" class="list-search" id="list-search" placeholder="Rechercher...">
+      <span class="text-muted" id="list-count"></span>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="list-table" id="list-table">
+      <thead>
+        <tr id="list-header-row"></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
 
-      function storageKey() {
-        return `mgmt_hidden_cols_${currentListKey || 'default'}`;
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  const listSection=document.getElementById('list-section');
+  const listTitle=document.getElementById('list-title');
+  const listCount=document.getElementById('list-count');
+  const listTableBody=document.querySelector('#list-table tbody');
+  const listHeaderRow=document.getElementById('list-header-row');
+  const listSearch=document.getElementById('list-search');
+  const listPageSize=document.getElementById('list-page-size');
+  const listPagePrev=document.getElementById('list-page-prev');
+  const listPageNext=document.getElementById('list-page-next');
+  const listPageInfo=document.getElementById('list-page-info');
+  const listLoading=document.getElementById('list-loading');
+  const listBack=document.getElementById('list-back');
+  const columnToggleBtn=document.getElementById('column-toggle-btn');
+  const columnMenu=document.getElementById('column-menu');
+  const currencyContainer=document.getElementById('currency-container');
+  const deviseChartCanvas=document.getElementById('deviseChart');
+  const deviseCommercialBody=document.getElementById('devise-commercial-body');
+  const deviseCommercialFilter=document.getElementById('devise-commercial-filter');
+  let currentListKey=null;
+  let currentItems=[];
+  let currentColumns=[];
+  let hiddenColumns=new Set();
+  let currentPage=1;
+  let listMode='summary';
+  let commercialFilter=null;
+  let deviseChart=null;
+
+  function storageKey(){
+    return `mgmt_hidden_cols_${currentListKey||'default'}`;
+  }
+
+  function loadHiddenColumns(){
+    try{
+      const raw=localStorage.getItem(storageKey());
+      if(!raw) return new Set();
+      const arr=JSON.parse(raw);
+      return new Set(Array.isArray(arr)?arr:[]);
+    }catch{
+      return new Set();
+    }
+  }
+
+  function saveHiddenColumns(){
+    try{
+      localStorage.setItem(storageKey(),JSON.stringify(Array.from(hiddenColumns)));
+    }catch{}
+  }
+
+  const columnSets={
+    freightSummary:[
+      {key:'commercial',label:'Commercial'},
+      {key:'count',label:'Nombre'},
+      {key:'total_achat',label:'Total Achat'},
+      {key:'total_vente',label:'Total Vente'},
+      {key:'total_marge',label:'Total Marge'}
+    ],
+    freightDetails:[
+      {key:'devise',label:'Devise'},
+      {key:'dossier',label:'Dossier'},
+      {key:'house',label:'House'},
+      {key:'mont_achat',label:'Mont Achat'},
+      {key:'mont_vente',label:'Mont Vente'},
+      {key:'marge',label:'Marge'},
+      {key:'eta',label:'ETA'},
+      {key:'fournisseur',label:'Fournisseur'},
+      {key:'reference_aa',label:'Référence AA'},
+      {key:'date_creation',label:'Date Création'},
+      {key:'id_utilisateur',label:'Id Utilisateur'},
+      {key:'email_utilisateur',label:'Email Utilisateur'}
+    ],
+    freightCommercialDetails:[
+      {key:'dossier',label:'Dossier'},
+      {key:'house',label:'House'},
+      {key:'devise',label:'Devise'},
+      {key:'mont_achat',label:'Mont Achat'},
+      {key:'mont_vente',label:'Mont Vente'},
+      {key:'marge',label:'Marge'},
+      {key:'eta',label:'ETA'},
+      {key:'fournisseur',label:'Fournisseur'},
+      {key:'reference_aa',label:'Référence AA'},
+      {key:'date_creation',label:'Date Création'}
+    ],
+    invoices:[
+      {key:'reference',label:'Numéro avis'},
+      {key:'date_process',label:'Date Process'},
+      {key:'dossier',label:'Dossier'},
+      {key:'nom_client',label:'Client'},
+      {key:'eta',label:'ETA'},
+      {key:'house',label:'House'},
+      {key:'service',label:'Service'},
+      {key:'nom_commercial',label:'Nom Commercial'},
+      {key:'total_ttc',label:'Total TTC'}
+    ],
+    default:[
+      {key:'reference',label:'Numéro avis'},
+      {key:'dossier',label:'Dossier'},
+      {key:'type',label:'Type'},
+      {key:'libelle',label:'Libellé'},
+      {key:'montant',label:'Montant'},
+      {key:'devise',label:'Devise'}
+    ]
+  };
+
+  const listData={
+    generated:{
+      title:'Total marge sur fret',
+      statusClass:'status-info',
+      columns:columnSets.freightSummary,
+      items:[]
+    },
+    'not-stamped':{
+      title:'Avis non timbrés',
+      statusClass:'status-danger',
+      columns:columnSets.invoices,
+      items:[]
+    },
+    'not-withdrawn':{
+      title:'Marchandises non retirées',
+      statusClass:'status-warning',
+      columns:columnSets.default,
+      items:[
+        {reference:'MG-0441',dossier:'DOS-100',type:'Magasinage',libelle:'Non retiré',montant:'0',devise:'TND'},
+        {reference:'MG-0442',dossier:'DOS-101',type:'Magasinage',libelle:'Non retiré',montant:'0',devise:'TND'}
+      ]
+    },
+    invoices:{
+      title:'Liste des factures (mois)',
+      statusClass:'status-success',
+      columns:columnSets.invoices,
+      items:[]
+    },
+  };
+
+  const listCache={};
+
+  function renderColumns(columns){
+    listHeaderRow.innerHTML='';
+    currentColumns=columns;
+    hiddenColumns=loadHiddenColumns();
+    columns.forEach(col=>{
+      const th=document.createElement('th');
+      th.textContent=col.label;
+      th.setAttribute('data-col',col.key);
+      if(hiddenColumns.has(col.key)){
+        th.classList.add('hidden-col');
       }
-
-      function loadHiddenColumns() {
-        try {
-          const raw = localStorage.getItem(storageKey());
-          if (!raw) return new Set();
-          const arr = JSON.parse(raw);
-          return new Set(Array.isArray(arr) ? arr : []);
-        } catch {
-          return new Set();
-        }
-      }
-
-      function saveHiddenColumns() {
-        try {
-          localStorage.setItem(storageKey(), JSON.stringify(Array.from(hiddenColumns)));
-        } catch {}
-      }
-
-      const columnSets = {
-        freightSummary: [
-          { key: 'commercial', label: 'Commercial' },
-          { key: 'count', label: 'Nombre' },
-          { key: 'total_achat', label: 'Total Achat' },
-          { key: 'total_vente', label: 'Total Vente' },
-          { key: 'total_marge', label: 'Total Marge' }
-        ],
-        freightDetails: [
-          { key: 'devise', label: 'Devise' },
-          { key: 'dossier', label: 'Dossier' },
-          { key: 'house', label: 'House' },
-          { key: 'mont_achat', label: 'Mont Achat' },
-          { key: 'mont_vente', label: 'Mont Vente' },
-          { key: 'marge', label: 'Marge' },
-          { key: 'eta', label: 'ETA' },
-          { key: 'fournisseur', label: 'Fournisseur' },
-          { key: 'reference_aa', label: 'Référence AA' },
-          { key: 'date_creation', label: 'Date Création' },
-          { key: 'id_utilisateur', label: 'Id Utilisateur' },
-          { key: 'email_utilisateur', label: 'Email Utilisateur' }
-        ],
-        freightCommercialDetails: [
-          { key: 'dossier', label: 'Dossier' },
-          { key: 'house', label: 'House' },
-          { key: 'devise', label: 'Devise' },
-          { key: 'mont_achat', label: 'Mont Achat' },
-          { key: 'mont_vente', label: 'Mont Vente' },
-          { key: 'marge', label: 'Marge' },
-          { key: 'eta', label: 'ETA' },
-          { key: 'fournisseur', label: 'Fournisseur' },
-          { key: 'reference_aa', label: 'Référence AA' },
-          { key: 'date_creation', label: 'Date Création' }
-        ],
-        invoices: [
-          { key: 'reference', label: 'Numéro avis' },
-          { key: 'date_process', label: 'Date Process' },
-          { key: 'dossier', label: 'Dossier' },
-          { key: 'nom_client', label: 'Client' },
-          { key: 'eta', label: 'ETA' },
-          { key: 'house', label: 'House' },
-          { key: 'service', label: 'Service' },
-          { key: 'nom_commercial', label: 'Nom Commercial' },
-          { key: 'total_ttc', label: 'Total TTC' }
-        ],
-        default: [
-          { key: 'reference', label: 'Numéro avis' },
-          { key: 'dossier', label: 'Dossier' },
-          { key: 'type', label: 'Type' },
-          { key: 'libelle', label: 'Libellé' },
-          { key: 'montant', label: 'Montant' },
-          { key: 'devise', label: 'Devise' }
-        ]
-      };
-
-      const listData = {
-        generated: {
-          title: 'Total marge sur fret',
-          statusClass: 'status-info',
-          columns: columnSets.freightSummary,
-          items: []
-        },
-        'not-stamped': {
-          title: 'Avis non timbrés',
-          statusClass: 'status-danger',
-          columns: columnSets.invoices,
-          items: []
-        },
-        'not-withdrawn': {
-          title: 'Marchandises non retirées',
-          statusClass: 'status-warning',
-          columns: columnSets.default,
-          items: [
-            { reference: 'MG-0441', dossier: 'DOS-100', type: 'Magasinage', libelle: 'Non retiré', montant: '0', devise: 'TND' },
-            { reference: 'MG-0442', dossier: 'DOS-101', type: 'Magasinage', libelle: 'Non retiré', montant: '0', devise: 'TND' }
-          ]
-        },
-        invoices: {
-          title: 'Liste des factures (mois)',
-          statusClass: 'status-success',
-          columns: columnSets.invoices,
-          items: []
-        },
-      };
-
-      const listCache = {};
-
-      function renderColumns(columns) {
-        listHeaderRow.innerHTML = '';
-        currentColumns = columns;
-        hiddenColumns = loadHiddenColumns();
-        columns.forEach(col => {
-          const th = document.createElement('th');
-          th.textContent = col.label;
-          th.setAttribute('data-col', col.key);
-          if (hiddenColumns.has(col.key)) {
-            th.classList.add('hidden-col');
-          }
-          listHeaderRow.appendChild(th);
-        });
-
-        renderColumnMenu(columns);
-      }
-
-      function renderColumnMenu(columns) {
-        if (!columnMenu) return;
-        columnMenu.innerHTML = '';
-        columns.forEach(col => {
-          const item = document.createElement('label');
-          item.className = 'column-item';
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = !hiddenColumns.has(col.key);
-          checkbox.dataset.key = col.key;
-          checkbox.addEventListener('change', function() {
-            toggleColumn(this.dataset.key, this.checked);
-          });
-          const span = document.createElement('span');
-          span.textContent = col.label;
-          item.appendChild(checkbox);
-          item.appendChild(span);
-          columnMenu.appendChild(item);
-        });
-      }
-
-      function toggleColumn(key, visible) {
-        if (!key) return;
-        if (visible) {
-          hiddenColumns.delete(key);
-        } else {
-          hiddenColumns.add(key);
-        }
-
-        document.querySelectorAll(`[data-col="${key}"]`).forEach(el => {
-          el.classList.toggle('hidden-col', !visible);
-        });
-
-        saveHiddenColumns();
-      }
-
-      async function fetchInvoices() {
-        if (listCache.invoices) return listCache.invoices;
-        const response = await fetch('/api/factures/aa-detail?limit=0');
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'Erreur API');
-        }
-        listCache.invoices = data.factures || [];
-        return listCache.invoices;
-      }
-
-      async function fetchFreightItems() {
-        if (listCache.freight) return listCache.freight;
-        const response = await fetch('/api/freight/items');
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'Erreur API');
-        }
-        listCache.freight = data.items || [];
-        return listCache.freight;
-      }
-
-      function setKpiValue(key, value) {
-        const el = document.querySelector(`[data-kpi-value="${key}"]`);
-        if (el) {
-          el.textContent = value;
-        }
-      }
-
-      function formatDateValue(value) {
-        if (!value) return value;
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
-        const dd = String(date.getDate()).padStart(2, '0');
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const yyyy = date.getFullYear();
-        return `${dd}/${mm}/${yyyy}`;
-      }
-
-      function formatAmount(value) {
-        const number = Number(value) || 0;
-        return number.toLocaleString('fr-FR', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
-      }
-
-      function renderDeviseCommercialSummary(items, deviseFilter = null) {
-        if (!deviseCommercialBody) return;
-        const grouped = new Map();
-        items.forEach(item => {
-          const devise = item.devise || 'N/A';
-          if (deviseFilter && devise !== deviseFilter) return;
-          const commercial = item.email_utilisateur || item.id_utilisateur || 'Non assigné';
-          const key = `${devise}||${commercial}`;
-          if (!grouped.has(key)) {
-            grouped.set(key, {
-              devise,
-              commercial,
-              total_achat: 0,
-              total_vente: 0,
-              total_marge: 0
-            });
-          }
-          const row = grouped.get(key);
-          const achat = Number(item.mont_achat) || 0;
-          const vente = Number(item.mont_vente) || 0;
-          row.total_achat += achat;
-          row.total_vente += vente;
-          row.total_marge += vente - achat;
-        });
-
-        const data = Array.from(grouped.values()).sort((a, b) => {
-          const byDevise = a.devise.localeCompare(b.devise, 'fr');
-          if (byDevise !== 0) return byDevise;
-          return a.commercial.localeCompare(b.commercial, 'fr');
-        });
-
-        if (deviseCommercialFilter) {
-          deviseCommercialFilter.textContent = deviseFilter ? `Devise: ${deviseFilter}` : '';
-        }
-
-        if (!data.length) {
-          deviseCommercialBody.innerHTML = `
-            <tr>
-              <td colspan="5">Aucune donnée disponible</td>
-            </tr>
-          `;
-          return;
-        }
-
-        deviseCommercialBody.innerHTML = data.map(row => `
-          <tr class="commercial-row" data-commercial="${row.commercial}">
-            <td>${row.devise}</td>
-            <td><button type="button" class="commercial-link" data-commercial="${row.commercial}">${row.commercial}</button></td>
-            <td>${formatAmount(row.total_achat)}</td>
-            <td>${formatAmount(row.total_vente)}</td>
-            <td>${formatAmount(row.total_marge)}</td>
-          </tr>
-        `).join('');
-
-        deviseCommercialBody.querySelectorAll('.commercial-row').forEach(row => {
-          row.addEventListener('click', function() {
-            const commercial = this.getAttribute('data-commercial');
-            if (!commercial) return;
-            const url = new URL(window.location.href);
-            url.searchParams.set('list', 'generated');
-            url.searchParams.set('listOnly', '1');
-            url.searchParams.set('commercial', commercial);
-            window.location.href = url.toString();
-          });
-        });
-
-        deviseCommercialBody.querySelectorAll('.commercial-link').forEach(button => {
-          button.addEventListener('click', function(event) {
-            event.stopPropagation();
-            const commercial = this.getAttribute('data-commercial');
-            if (!commercial) return;
-            const url = new URL(window.location.href);
-            url.searchParams.set('list', 'generated');
-            url.searchParams.set('listOnly', '1');
-            url.searchParams.set('commercial', commercial);
-            window.location.href = url.toString();
-          });
-        });
-      }
-
-      async function renderList(key) {
-        const data = listData[key];
-        if (!data) return;
-
-        currentListKey = key;
-        currentPage = 1;
-        listMode = key === 'generated' ? 'summary' : 'detail';
-        commercialFilter = null;
-        if (listBack) listBack.style.display = 'none';
-
-        if (key === 'generated') {
-          hiddenColumns = new Set();
-          saveHiddenColumns();
-        }
-
-        listTitle.textContent = data.title;
-        listTableBody.innerHTML = '';
-
-        const columns = key === 'generated' ? columnSets.freightSummary : (data.columns || columnSets.default);
-        renderColumns(columns);
-
-        let items = data.items || [];
-        if (key === 'not-stamped' || key === 'invoices') {
-          try {
-            if (listLoading) listLoading.classList.add('visible');
-            items = await fetchInvoices();
-            if (key === 'not-stamped') {
-              setKpiValue('not-stamped', items.length);
-            }
-          } catch (err) {
-            listTableBody.innerHTML = `
-              <tr>
-                <td colspan="${columns.length}">Erreur chargement: ${err.message}</td>
-              </tr>
-            `;
-            updateCount();
-            if (listLoading) listLoading.classList.remove('visible');
-            return;
-          } finally {
-            if (listLoading) listLoading.classList.remove('visible');
-          }
-        }
-
-        if (key === 'generated') {
-          try {
-            if (listLoading) listLoading.classList.add('visible');
-            items = await fetchFreightItems();
-          } catch (err) {
-            listTableBody.innerHTML = `
-              <tr>
-                <td colspan="${columns.length}">Erreur chargement: ${err.message}</td>
-              </tr>
-            `;
-            updateCount();
-            if (listLoading) listLoading.classList.remove('visible');
-            return;
-          } finally {
-            if (listLoading) listLoading.classList.remove('visible');
-          }
-        }
-
-        if (key === 'generated') {
-          const grouped = new Map();
-          items.forEach(item => {
-            const commercial = item.email_utilisateur || item.id_utilisateur || 'Non assigné';
-            if (!grouped.has(commercial)) {
-              grouped.set(commercial, {
-                commercial,
-                count: 0,
-                total_achat: 0,
-                total_vente: 0,
-                total_marge: 0
-              });
-            }
-            const row = grouped.get(commercial);
-            const achat = Number(item.mont_achat) || 0;
-            const vente = Number(item.mont_vente) || 0;
-            row.count += 1;
-            row.total_achat += achat;
-            row.total_vente += vente;
-            row.total_marge += (vente - achat);
-          });
-          currentItems = Array.from(grouped.values());
-          currentColumns = columnSets.freightSummary;
-          renderColumns(currentColumns);
-        } else {
-          currentItems = items;
-        }
-
-        if (!items.length) {
-          listTableBody.innerHTML = `
-            <tr>
-              <td colspan="${columns.length}">Aucune donnée</td>
-            </tr>
-          `;
-          updateCount();
-          return;
-        }
-        applySearchFilter();
-
-      }
-
-      async function initKpiCounts() {
-        try {
-          const items = await fetchInvoices();
-          setKpiValue('not-stamped', items.length);
-          // compute invoices in current month
-          try {
-            const now = new Date();
-            const curYear = now.getFullYear();
-            const curMonth = now.getMonth() + 1; // 1..12
-            const monthCount = items.reduce((count, it) => {
-              if (!it.date_process) return count;
-              const d = new Date(it.date_process);
-              if (Number.isNaN(d.getTime())) return count;
-              return count + ((d.getFullYear() === curYear && (d.getMonth() + 1) === curMonth) ? 1 : 0);
-            }, 0);
-            setKpiValue('invoices', monthCount);
-          } catch (e) {
-            setKpiValue('invoices', items.length);
-          }
-        } catch {
-          setKpiValue('not-stamped', 0);
-          setKpiValue('invoices', 0);
-        }
-      }
-
-      function updateCount(visible, total) {
-        if (visible === total) {
-          listCount.textContent = `${total} élément(s)`;
-        } else {
-          listCount.textContent = `${visible} / ${total} élément(s)`;
-        }
-      }
-
-      function applySearchFilter() {
-        const term = (listSearch.value || '').toLowerCase().trim();
-        const size = parseInt(listPageSize.value, 10);
-        const columns = currentColumns.length ? currentColumns : (listData[currentListKey]?.columns) || columnSets.default;
-
-        const filtered = currentItems.filter(item => {
-          if (!term) return true;
-          const text = Object.values(item).join(' ').toLowerCase();
-          return text.includes(term);
-        });
-
-        const totalPages = size > 0 ? Math.max(1, Math.ceil(filtered.length / size)) : 1;
-        if (currentPage > totalPages) currentPage = totalPages;
-        if (currentPage < 1) currentPage = 1;
-
-        const start = size > 0 ? (currentPage - 1) * size : 0;
-        const end = size > 0 ? start + size : filtered.length;
-        const limited = size > 0 ? filtered.slice(start, end) : filtered;
-
-        listTableBody.innerHTML = '';
-        if (!limited.length) {
-          listTableBody.innerHTML = `
-            <tr>
-              <td colspan="${columns.length}">Aucune donnée</td>
-            </tr>
-          `;
-          updateCount(0, filtered.length);
-          updatePagination(0, filtered.length, totalPages);
-          return;
-        }
-
-        limited.forEach(item => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = columns.map(col => {
-            let value = item[col.key] ?? '';
-            if (col.key.includes('date') || col.key === 'eta') {
-              value = formatDateValue(value);
-            }
-            const hiddenClass = hiddenColumns.has(col.key) ? 'hidden-col' : '';
-            return `<td data-col="${col.key}" class="${hiddenClass}">${value}</td>`;
-          }).join('');
-          if (currentListKey === 'generated' && listMode === 'summary') {
-            tr.classList.add('clickable-row');
-            tr.addEventListener('click', function() {
-              const commercial = item.commercial;
-              if (!commercial) return;
-              const url = new URL(window.location.href);
-              url.searchParams.set('list', 'generated');
-              url.searchParams.set('listOnly', '1');
-              url.searchParams.set('commercial', commercial);
-              window.location.href = url.toString();
-            });
-          }
-          listTableBody.appendChild(tr);
-        });
-
-        updateCount(limited.length, filtered.length);
-        updatePagination(limited.length, filtered.length, totalPages);
-      }
-
-      function updatePagination(visible, total, totalPages) {
-        if (!listPageInfo || !listPagePrev || !listPageNext) return;
-        const size = parseInt(listPageSize.value, 10);
-        if (size <= 0 || total === 0) {
-          listPageInfo.textContent = '';
-          listPagePrev.disabled = true;
-          listPageNext.disabled = true;
-          return;
-        }
-
-        listPageInfo.textContent = `Page ${currentPage} / ${totalPages}`;
-        listPagePrev.disabled = currentPage <= 1;
-        listPageNext.disabled = currentPage >= totalPages;
-      }
-
-      document.querySelectorAll('.kpi-card').forEach(card => {
-        card.addEventListener('click', function() {
-          document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active'));
-          this.classList.add('active');
-          const key = this.getAttribute('data-key');
-          if (key === 'generated') {
-            const url = new URL(window.location.href);
-            url.searchParams.set('chart', 'devise');
-            url.searchParams.set('listOnly', '1');
-            window.open(url.toString(), '_blank');
-            if (listSearch) listSearch.value = '';
-            return;
-          }
-          if (key) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('list', key);
-            url.searchParams.set('listOnly', '1');
-            window.open(url.toString(), '_blank');
-          }
-          if (listSearch) listSearch.value = '';
-        });
-      });
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const listParam = urlParams.get('list');
-      const listOnlyParam = urlParams.get('listOnly');
-      const chartParam = urlParams.get('chart');
-      const deviseParam = urlParams.get('devise');
-      const commercialParam = urlParams.get('commercial');
-      if (listOnlyParam) {
-        document.body.classList.add('list-only');
-      }
-      if (listOnlyParam && listParam) {
-        const activeCard = document.querySelector(`.kpi-card[data-key="${listParam}"]`);
-        if (activeCard) activeCard.classList.add('active');
-        if (listParam === 'generated' && commercialParam) {
-          showFreightByCommercial(commercialParam);
-        } else if (listParam === 'generated' && deviseParam) {
-          showFreightByDevise(deviseParam);
-        } else {
-          renderList(listParam);
-        }
-      } else if (chartParam === 'devise') {
-        document.body.classList.add('chart-only');
-        loadDeviseChart();
-      }
-
-      initKpiCounts();
-
-      if (listSearch) {
-        listSearch.addEventListener('input', function() {
-          if (!currentListKey) return;
-          currentPage = 1;
-          applySearchFilter();
-        });
-      }
-
-      if (listPageSize) {
-        listPageSize.addEventListener('change', function() {
-          if (!currentListKey) return;
-          currentPage = 1;
-          applySearchFilter();
-        });
-      }
-
-      if (listPagePrev) {
-        listPagePrev.addEventListener('click', function() {
-          if (currentPage > 1) {
-            currentPage -= 1;
-            applySearchFilter();
-          }
-        });
-      }
-
-      if (listPageNext) {
-        listPageNext.addEventListener('click', function() {
-          currentPage += 1;
-          applySearchFilter();
-        });
-      }
-
-
-      if (listBack) {
-        listBack.addEventListener('click', function() {
-          if (currentListKey !== 'generated') return;
-          listMode = 'summary';
-          commercialFilter = null;
-          listTitle.textContent = listData.generated.title;
-          listBack.style.display = 'none';
-          currentColumns = columnSets.freightSummary;
-          renderColumns(currentColumns);
-          const grouped = new Map();
-          listCache.freight.forEach(item => {
-            const commercial = item.email_utilisateur || item.id_utilisateur || 'Non assigné';
-            if (!grouped.has(commercial)) {
-              grouped.set(commercial, {
-                commercial,
-                count: 0,
-                total_achat: 0,
-                total_vente: 0,
-                total_marge: 0
-              });
-            }
-            const row = grouped.get(commercial);
-            row.count += 1;
-            const achat = Number(item.mont_achat) || 0;
-            const vente = Number(item.mont_vente) || 0;
-            row.total_achat += achat;
-            row.total_vente += vente;
-            row.total_marge += (vente - achat);
-          });
-          currentItems = Array.from(grouped.values());
-          currentPage = 1;
-          applySearchFilter();
-        });
-      }
-
-      if (columnToggleBtn && columnMenu) {
-        columnToggleBtn.addEventListener('click', function() {
-          columnMenu.classList.toggle('visible');
-        });
-
-        document.addEventListener('click', function(e) {
-          if (!e.target.closest('.column-toggle')) {
-            columnMenu.classList.remove('visible');
-          }
-        });
-      }
-
-      const barCtx = document.getElementById('barChart').getContext('2d');
-      const barLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-      const barData = new Array(12).fill(0);
-      const barDataPrev = new Array(12).fill(0);
-
-      const barChart = new Chart(barCtx, {
-        type: 'bar',
-        data: {
-          labels: barLabels,
-          datasets: [
-            {
-              label: 'Année en cours (k TND)',
-              data: barData,
-              backgroundColor: 'rgba(52, 152, 219, 0.6)',
-              borderColor: '#3498db',
-              borderWidth: 1
-            },
-            {
-              label: 'Année précédente (k TND)',
-              data: barDataPrev,
-              backgroundColor: 'rgba(149, 165, 166, 0.5)',
-              borderColor: '#95a5a6',
-              borderWidth: 1
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          onClick: function(evt, elements) {
-            if (!elements.length) return;
-            const url = new URL(window.location.href);
-            url.searchParams.set('list', 'invoices');
-            url.searchParams.set('listOnly', '1');
-            window.open(url.toString(), '_blank');
-            renderList('invoices');
-            if (listSearch) listSearch.value = '';
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.05)' }
-            },
-            x: { grid: { color: 'rgba(0,0,0,0.05)' } }
-          },
-          plugins: {
-            legend: { display: true },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `${context.parsed.y} k TND`;
-                }
-              }
-            }
-          }
-        }
-      });
-
-      async function loadMonthlyTurnover() {
-        try {
-          const response = await fetch('/api/factures/ff-monthly');
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.error || 'Erreur API');
-          }
-
-          const current = Array.isArray(data.current) ? data.current : [];
-          const previous = Array.isArray(data.previous) ? data.previous : [];
-          barChart.data.datasets[0].data = current.length === 12 ? current : barData;
-          barChart.data.datasets[1].data = previous.length === 12 ? previous : barDataPrev;
-          barChart.update();
-        } catch (err) {
-          console.error('Erreur chargement CA mensuel:', err);
-        }
-      }
-
-      loadMonthlyTurnover();
-
-      const activityCtx = document.getElementById('activityChart').getContext('2d');
-      const activityChart = new Chart(activityCtx, {
-        type: 'pie',
-        data: {
-          labels: ['Timbrage', 'Magasinage', 'Surestarie', 'Agent (converti)'],
-          datasets: [{
-            data: [35, 25, 20, 20],
-            backgroundColor: ['#3498db', '#2ecc71', '#e74c3c', '#f39c12'],
-            borderWidth: 2,
-            borderColor: '#fff'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const data = context.dataset.data || [];
-                  const total = data.reduce((sum, val) => sum + (Number(val) || 0), 0);
-                  const value = Number(context.parsed) || 0;
-                  return `${context.label}: ${value} (Total: ${total})`;
-                }
-              }
-            }
-          }
-        }
-      });
-
-        async function loadActivityData() {
-          try {
-            const response = await fetch('/api/factures/ff-activity');
-            const data = await response.json();
-            if (!response.ok) {
-              throw new Error(data.error || 'Erreur API');
-            }
-
-            document.querySelector('[data-activity-value="timbrage"]').textContent = data.timbrage || 0;
-            document.querySelector('[data-activity-value="magasinage"]').textContent = data.magasinage || 0;
-            document.querySelector('[data-activity-value="agent"]').textContent = data.agent || 0;
-            document.querySelector('[data-activity-value="surestarie"]').textContent = data.surestarie || 0;
-
-            activityChart.data.labels = ['Timbrage', 'Magasinage', 'Agent', 'Surestarie'];
-            activityChart.data.datasets[0].data = [
-              data.timbrage || 0,
-              data.magasinage || 0,
-              data.agent || 0,
-              data.surestarie || 0
-            ];
-            activityChart.data.datasets[0].backgroundColor = ['#3498db', '#2ecc71', '#f39c12', '#e74c3c'];
-            activityChart.update();
-          } catch (err) {
-            console.error('Erreur chargement activité:', err);
-          }
-        }
-
-        function renderDeviseChart(labels, values) {
-          if (!deviseChartCanvas) return;
-          const ctx = deviseChartCanvas.getContext('2d');
-          if (!deviseChart) {
-            deviseChart = new Chart(ctx, {
-              type: 'bar',
-              data: {
-                labels,
-                datasets: [
-                  {
-                    label: 'Marge sur fret',
-                    data: values,
-                    backgroundColor: 'rgba(52, 152, 219, 0.6)',
-                    borderColor: '#3498db',
-                    borderWidth: 1
-                  }
-                ]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
-                  x: { grid: { color: 'rgba(0,0,0,0.05)' } }
-                },
-                onClick: async function(evt, elements) {
-                  if (!elements.length) return;
-                  const index = elements[0].index;
-                  const devise = this.data.labels[index];
-                  if (devise) {
-                    const items = listCache.freight || await fetchFreightItems();
-                    renderDeviseCommercialSummary(items, devise);
-                  }
-                }
-              }
-            });
-          } else {
-            deviseChart.data.labels = labels;
-            deviseChart.data.datasets[0].data = values;
-            deviseChart.update();
-          }
-        }
-
-        async function loadDeviseChart() {
-          try {
-            const response = await fetch('/api/freight/by-devise');
-            const data = await response.json();
-            if (!response.ok) {
-              throw new Error(data.error || 'Erreur API');
-            }
-            const items = Array.isArray(data.items) ? data.items : [];
-            const labels = items.map(item => item.devise || 'N/A');
-            const values = items.map(item => item.total_marge || 0);
-            renderDeviseChart(labels, values);
-            const freightItems = await fetchFreightItems();
-            renderDeviseCommercialSummary(freightItems);
-            if (currencyContainer) {
-              currencyContainer.classList.add('visible');
-            }
-          } catch (err) {
-            console.error('Erreur chargement devise:', err);
-          }
-        }
-
-        async function showFreightByDevise(devise) {
-          try {
-            if (listLoading) listLoading.classList.add('visible');
-            const items = await fetchFreightItems();
-            listMode = 'detail';
-            currentListKey = 'generated';
-            if (listBack) listBack.style.display = 'inline-flex';
-            listTitle.textContent = `Détails - ${devise}`;
-            currentColumns = columnSets.freightDetails;
-            renderColumns(currentColumns);
-            currentItems = items
-              .filter(i => (i.devise || 'N/A') === devise)
-              .map(i => ({
-                ...i,
-                marge: (Number(i.mont_vente) || 0) - (Number(i.mont_achat) || 0)
-              }));
-            currentPage = 1;
-            applySearchFilter();
-            document.body.classList.add('chart-only', 'show-chart-list');
-          } catch (err) {
-            listTableBody.innerHTML = `
-              <tr>
-                <td colspan="${(currentColumns || []).length}">Erreur chargement: ${err.message}</td>
-              </tr>
-            `;
-          } finally {
-            if (listLoading) listLoading.classList.remove('visible');
-          }
-        }
-
-        async function showFreightByCommercial(commercial) {
-          try {
-            if (listLoading) listLoading.classList.add('visible');
-            const items = await fetchFreightItems();
-            listMode = 'detail';
-            currentListKey = 'generated';
-            commercialFilter = commercial;
-            if (listBack) listBack.style.display = 'inline-flex';
-            listTitle.textContent = `Dossiers - ${commercial}`;
-            currentColumns = columnSets.freightCommercialDetails;
-            renderColumns(currentColumns);
-            currentItems = items
-              .filter(i => (i.email_utilisateur || i.id_utilisateur || 'Non assigné') === commercial)
-              .map(i => ({
-                ...i,
-                marge: (Number(i.mont_vente) || 0) - (Number(i.mont_achat) || 0)
-              }));
-            currentPage = 1;
-            applySearchFilter();
-          } catch (err) {
-            listTableBody.innerHTML = `
-              <tr>
-                <td colspan="${(currentColumns || []).length}">Erreur chargement: ${err.message}</td>
-              </tr>
-            `;
-          } finally {
-            if (listLoading) listLoading.classList.remove('visible');
-          }
-        }
-
-        loadActivityData();
-
+      listHeaderRow.appendChild(th);
     });
-  </script>
+    renderColumnMenu(columns);
+  }
+
+  function renderColumnMenu(columns){
+    if(!columnMenu) return;
+    columnMenu.innerHTML='';
+    columns.forEach(col=>{
+      const item=document.createElement('label');
+      item.className='column-item';
+      const checkbox=document.createElement('input');
+      checkbox.type='checkbox';
+      checkbox.checked=!hiddenColumns.has(col.key);
+      checkbox.dataset.key=col.key;
+      checkbox.addEventListener('change',function(){
+        toggleColumn(this.dataset.key,this.checked);
+      });
+      const span=document.createElement('span');
+      span.textContent=col.label;
+      item.appendChild(checkbox);
+      item.appendChild(span);
+      columnMenu.appendChild(item);
+    });
+  }
+
+  function toggleColumn(key,visible){
+    if(!key) return;
+    if(visible){
+      hiddenColumns.delete(key);
+    }else{
+      hiddenColumns.add(key);
+    }
+    document.querySelectorAll(`[data-col="${key}"]`).forEach(el=>{
+      el.classList.toggle('hidden-col',!visible);
+    });
+    saveHiddenColumns();
+  }
+
+  async function fetchInvoices(){
+    if(listCache.invoices) return listCache.invoices;
+    const response=await fetch('/api/factures/aa-detail?limit=0');
+    const data=await response.json();
+    if(!response.ok){
+      throw new Error(data.error||'Erreur API');
+    }
+    listCache.invoices=data.factures||[];
+    return listCache.invoices;
+  }
+
+  async function fetchFreightItems(){
+    if(listCache.freight) return listCache.freight;
+    const response=await fetch('/api/freight/items');
+    const data=await response.json();
+    if(!response.ok){
+      throw new Error(data.error||'Erreur API');
+    }
+    listCache.freight=data.items||[];
+    return listCache.freight;
+  }
+
+  function setKpiValue(key,value){
+    const el=document.querySelector(`[data-kpi-value="${key}"]`);
+    if(el){
+      el.textContent=value;
+    }
+  }
+
+  function formatDateValue(value){
+    if(!value) return value;
+    const date=new Date(value);
+    if(Number.isNaN(date.getTime())) return value;
+    const dd=String(date.getDate()).padStart(2,'0');
+    const mm=String(date.getMonth()+1).padStart(2,'0');
+    const yyyy=date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  function formatAmount(value){
+    const number=Number(value)||0;
+    return number.toLocaleString('fr-FR',{
+      minimumFractionDigits:2,
+      maximumFractionDigits:2
+    });
+  }
+
+  function renderDeviseCommercialSummary(items,deviseFilter=null){
+    if(!deviseCommercialBody) return;
+    const grouped=new Map();
+    items.forEach(item=>{
+      const devise=item.devise||'N/A';
+      if(deviseFilter&&devise!==deviseFilter) return;
+      const commercial=item.email_utilisateur||item.id_utilisateur||'Non assigné';
+      const key=`${devise}||${commercial}`;
+      if(!grouped.has(key)){
+        grouped.set(key,{
+          devise,
+          commercial,
+          total_achat:0,
+          total_vente:0,
+          total_marge:0
+        });
+      }
+      const row=grouped.get(key);
+      const achat=Number(item.mont_achat)||0;
+      const vente=Number(item.mont_vente)||0;
+      row.total_achat+=achat;
+      row.total_vente+=vente;
+      row.total_marge+=vente-achat;
+    });
+    const data=Array.from(grouped.values()).sort((a,b)=>{
+      const byDevise=a.devise.localeCompare(b.devise,'fr');
+      if(byDevise!==0) return byDevise;
+      return a.commercial.localeCompare(b.commercial,'fr');
+    });
+    if(deviseCommercialFilter){
+      deviseCommercialFilter.textContent=deviseFilter?`Devise:${deviseFilter}`:'';
+    }
+    if(!data.length){
+      deviseCommercialBody.innerHTML=`
+        <tr>
+          <td colspan="5">Aucune donnée disponible</td>
+        </tr>
+      `;
+      return;
+    }
+    deviseCommercialBody.innerHTML=data.map(row=>`
+      <tr class="commercial-row" data-commercial="${row.commercial}">
+        <td>${row.devise}</td>
+        <td><button type="button" class="commercial-link" data-commercial="${row.commercial}">${row.commercial}</button></td>
+        <td>${formatAmount(row.total_achat)}</td>
+        <td>${formatAmount(row.total_vente)}</td>
+        <td>${formatAmount(row.total_marge)}</td>
+      </tr>
+    `).join('');
+    deviseCommercialBody.querySelectorAll('.commercial-row').forEach(row=>{
+      row.addEventListener('click',function(){
+        const commercial=this.getAttribute('data-commercial');
+        if(!commercial) return;
+        const url=new URL(window.location.href);
+        url.searchParams.set('list','generated');
+        url.searchParams.set('listOnly','1');
+        url.searchParams.set('commercial',commercial);
+        window.location.href=url.toString();
+      });
+    });
+    deviseCommercialBody.querySelectorAll('.commercial-link').forEach(button=>{
+      button.addEventListener('click',function(event){
+        event.stopPropagation();
+        const commercial=this.getAttribute('data-commercial');
+        if(!commercial) return;
+        const url=new URL(window.location.href);
+        url.searchParams.set('list','generated');
+        url.searchParams.set('listOnly','1');
+        url.searchParams.set('commercial',commercial);
+        window.location.href=url.toString();
+      });
+    });
+  }
+
+  async function renderList(key){
+    const data=listData[key];
+    if(!data) return;
+    currentListKey=key;
+    currentPage=1;
+    listMode=key==='generated'?'summary':'detail';
+    commercialFilter=null;
+    if(listBack) listBack.style.display='none';
+    if(key==='generated'){
+      hiddenColumns=new Set();
+      saveHiddenColumns();
+    }
+    listTitle.textContent=data.title;
+    listTableBody.innerHTML='';
+    const columns=key==='generated'?columnSets.freightSummary:(data.columns||columnSets.default);
+    renderColumns(columns);
+    let items=data.items||[];
+    if(key==='not-stamped'||key==='invoices'){
+      try{
+        if(listLoading) listLoading.classList.add('visible');
+        items=await fetchInvoices();
+        if(key==='not-stamped'){
+          setKpiValue('not-stamped',items.length);
+        }
+      }catch(err){
+        listTableBody.innerHTML=`
+          <tr>
+            <td colspan="${columns.length}">Erreur chargement:${err.message}</td>
+          </tr>
+        `;
+        updateCount();
+        if(listLoading) listLoading.classList.remove('visible');
+        return;
+      }finally{
+        if(listLoading) listLoading.classList.remove('visible');
+      }
+    }
+    if(key==='generated'){
+      try{
+        if(listLoading) listLoading.classList.add('visible');
+        items=await fetchFreightItems();
+      }catch(err){
+        listTableBody.innerHTML=`
+          <tr>
+            <td colspan="${columns.length}">Erreur chargement:${err.message}</td>
+          </tr>
+        `;
+        updateCount();
+        if(listLoading) listLoading.classList.remove('visible');
+        return;
+      }finally{
+        if(listLoading) listLoading.classList.remove('visible');
+      }
+    }
+    if(key==='generated'){
+      const grouped=new Map();
+      items.forEach(item=>{
+        const commercial=item.email_utilisateur||item.id_utilisateur||'Non assigné';
+        if(!grouped.has(commercial)){
+          grouped.set(commercial,{
+            commercial,
+            count:0,
+            total_achat:0,
+            total_vente:0,
+            total_marge:0
+          });
+        }
+        const row=grouped.get(commercial);
+        const achat=Number(item.mont_achat)||0;
+        const vente=Number(item.mont_vente)||0;
+        row.count+=1;
+        row.total_achat+=achat;
+        row.total_vente+=vente;
+        row.total_marge+=(vente-achat);
+      });
+      currentItems=Array.from(grouped.values());
+      currentColumns=columnSets.freightSummary;
+      renderColumns(currentColumns);
+    }else{
+      currentItems=items;
+    }
+    if(!items.length){
+      listTableBody.innerHTML=`
+        <tr>
+          <td colspan="${columns.length}">Aucune donnée</td>
+        </tr>
+      `;
+      updateCount();
+      return;
+    }
+    applySearchFilter();
+  }
+
+  async function initKpiCounts(){
+    try{
+      const items=await fetchInvoices();
+      setKpiValue('not-stamped',items.length);
+      try{
+        const now=new Date();
+        const curYear=now.getFullYear();
+        const curMonth=now.getMonth()+1;
+        const monthCount=items.reduce((count,it)=>{
+          if(!it.date_process) return count;
+          const d=new Date(it.date_process);
+          if(Number.isNaN(d.getTime())) return count;
+          return count+((d.getFullYear()===curYear&&(d.getMonth()+1)===curMonth)?1:0);
+        },0);
+        setKpiValue('invoices',monthCount);
+      }catch(e){
+        setKpiValue('invoices',items.length);
+      }
+    }catch{
+      setKpiValue('not-stamped',0);
+      setKpiValue('invoices',0);
+    }
+  }
+
+  function updateCount(visible,total){
+    if(visible===total){
+      listCount.textContent=`${total} élément(s)`;
+    }else{
+      listCount.textContent=`${visible}/${total} élément(s)`;
+    }
+  }
+
+  function applySearchFilter(){
+    const term=(listSearch.value||'').toLowerCase().trim();
+    const size=parseInt(listPageSize.value,10);
+    const columns=currentColumns.length?currentColumns:(listData[currentListKey]?.columns)||columnSets.default;
+    const filtered=currentItems.filter(item=>{
+      if(!term) return true;
+      const text=Object.values(item).join(' ').toLowerCase();
+      return text.includes(term);
+    });
+    const totalPages=size>0?Math.max(1,Math.ceil(filtered.length/size)):1;
+    if(currentPage>totalPages) currentPage=totalPages;
+    if(currentPage<1) currentPage=1;
+    const start=size>0?(currentPage-1)*size:0;
+    const end=size>0?start+size:filtered.length;
+    const limited=size>0?filtered.slice(start,end):filtered;
+    listTableBody.innerHTML='';
+    if(!limited.length){
+      listTableBody.innerHTML=`
+        <tr>
+          <td colspan="${columns.length}">Aucune donnée</td>
+        </tr>
+      `;
+      updateCount(0,filtered.length);
+      updatePagination(0,filtered.length,totalPages);
+      return;
+    }
+    limited.forEach(item=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=columns.map(col=>{
+        let value=item[col.key]??'';
+        if(col.key.includes('date')||col.key==='eta'){
+          value=formatDateValue(value);
+        }
+        const hiddenClass=hiddenColumns.has(col.key)?'hidden-col':'';
+        return `<td data-col="${col.key}" class="${hiddenClass}">${value}</td>`;
+      }).join('');
+      if(currentListKey==='generated'&&listMode==='summary'){
+        tr.classList.add('clickable-row');
+        tr.addEventListener('click',function(){
+          const commercial=item.commercial;
+          if(!commercial) return;
+          const url=new URL(window.location.href);
+          url.searchParams.set('list','generated');
+          url.searchParams.set('listOnly','1');
+          url.searchParams.set('commercial',commercial);
+          window.location.href=url.toString();
+        });
+      }
+      listTableBody.appendChild(tr);
+    });
+    updateCount(limited.length,filtered.length);
+    updatePagination(limited.length,filtered.length,totalPages);
+  }
+
+  function updatePagination(visible,total,totalPages){
+    if(!listPageInfo||!listPagePrev||!listPageNext) return;
+    const size=parseInt(listPageSize.value,10);
+    if(size<=0||total===0){
+      listPageInfo.textContent='';
+      listPagePrev.disabled=true;
+      listPageNext.disabled=true;
+      return;
+    }
+    listPageInfo.textContent=`Page ${currentPage}/${totalPages}`;
+    listPagePrev.disabled=currentPage<=1;
+    listPageNext.disabled=currentPage>=totalPages;
+  }
+
+  document.querySelectorAll('.kpi-card').forEach(card=>{
+    card.addEventListener('click',function(){
+      document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('active'));
+      this.classList.add('active');
+      const key=this.getAttribute('data-key');
+      if(key==='generated'){
+        const url=new URL(window.location.href);
+        url.searchParams.set('chart','devise');
+        url.searchParams.set('listOnly','1');
+        window.open(url.toString(),'_blank');
+        if(listSearch) listSearch.value='';
+        return;
+      }
+      if(key){
+        const url=new URL(window.location.href);
+        url.searchParams.set('list',key);
+        url.searchParams.set('listOnly','1');
+        window.open(url.toString(),'_blank');
+      }
+      if(listSearch) listSearch.value='';
+    });
+  });
+
+  const urlParams=new URLSearchParams(window.location.search);
+  const listParam=urlParams.get('list');
+  const listOnlyParam=urlParams.get('listOnly');
+  const chartParam=urlParams.get('chart');
+  const deviseParam=urlParams.get('devise');
+  const commercialParam=urlParams.get('commercial');
+  if(listOnlyParam){
+    document.body.classList.add('list-only');
+  }
+  if(listOnlyParam&&listParam){
+    const activeCard=document.querySelector(`.kpi-card[data-key="${listParam}"]`);
+    if(activeCard) activeCard.classList.add('active');
+    if(listParam==='generated'&&commercialParam){
+      showFreightByCommercial(commercialParam);
+    }else if(listParam==='generated'&&deviseParam){
+      showFreightByDevise(deviseParam);
+    }else{
+      renderList(listParam);
+    }
+  }else if(chartParam==='devise'){
+    document.body.classList.add('chart-only');
+    loadDeviseChart();
+  }
+
+  initKpiCounts();
+
+  if(listSearch){
+    listSearch.addEventListener('input',function(){
+      if(!currentListKey) return;
+      currentPage=1;
+      applySearchFilter();
+    });
+  }
+
+  if(listPageSize){
+    listPageSize.addEventListener('change',function(){
+      if(!currentListKey) return;
+      currentPage=1;
+      applySearchFilter();
+    });
+  }
+
+  if(listPagePrev){
+    listPagePrev.addEventListener('click',function(){
+      if(currentPage>1){
+        currentPage-=1;
+        applySearchFilter();
+      }
+    });
+  }
+
+  if(listPageNext){
+    listPageNext.addEventListener('click',function(){
+      currentPage+=1;
+      applySearchFilter();
+    });
+  }
+
+  if(listBack){
+    listBack.addEventListener('click',function(){
+      if(currentListKey!=='generated') return;
+      listMode='summary';
+      commercialFilter=null;
+      listTitle.textContent=listData.generated.title;
+      listBack.style.display='none';
+      currentColumns=columnSets.freightSummary;
+      renderColumns(currentColumns);
+      const grouped=new Map();
+      listCache.freight.forEach(item=>{
+        const commercial=item.email_utilisateur||item.id_utilisateur||'Non assigné';
+        if(!grouped.has(commercial)){
+          grouped.set(commercial,{
+            commercial,
+            count:0,
+            total_achat:0,
+            total_vente:0,
+            total_marge:0
+          });
+        }
+        const row=grouped.get(commercial);
+        row.count+=1;
+        const achat=Number(item.mont_achat)||0;
+        const vente=Number(item.mont_vente)||0;
+        row.total_achat+=achat;
+        row.total_vente+=vente;
+        row.total_marge+=(vente-achat);
+      });
+      currentItems=Array.from(grouped.values());
+      currentPage=1;
+      applySearchFilter();
+    });
+  }
+
+  if(columnToggleBtn&&columnMenu){
+    columnToggleBtn.addEventListener('click',function(){
+      columnMenu.classList.toggle('visible');
+    });
+    document.addEventListener('click',function(e){
+      if(!e.target.closest('.column-toggle')){
+        columnMenu.classList.remove('visible');
+      }
+    });
+  }
+
+  const barCtx=document.getElementById('barChart').getContext('2d');
+  const barLabels=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+  const barData=new Array(12).fill(0);
+  const barDataPrev=new Array(12).fill(0);
+  const barChart=new Chart(barCtx,{
+    type:'bar',
+    data:{
+      labels:barLabels,
+      datasets:[
+        {
+          label:'Année en cours (k TND)',
+          data:barData,
+          backgroundColor:'rgba(52,152,219,0.6)',
+          borderColor:'#3498db',
+          borderWidth:1
+        },
+        {
+          label:'Année précédente (k TND)',
+          data:barDataPrev,
+          backgroundColor:'rgba(149,165,166,0.5)',
+          borderColor:'#95a5a6',
+          borderWidth:1
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      onClick:function(evt,elements){
+        if(!elements.length) return;
+        const url=new URL(window.location.href);
+        url.searchParams.set('list','invoices');
+        url.searchParams.set('listOnly','1');
+        window.open(url.toString(),'_blank');
+        renderList('invoices');
+        if(listSearch) listSearch.value='';
+      },
+      scales:{
+        y:{
+          beginAtZero:true,
+          grid:{color:'rgba(0,0,0,0.05)'}
+        },
+        x:{grid:{color:'rgba(0,0,0,0.05)'}}
+      },
+      plugins:{
+        legend:{display:true},
+        tooltip:{
+          callbacks:{
+            label:function(context){
+              return `${context.parsed.y} k TND`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  async function loadMonthlyTurnover(){
+    try{
+      const response=await fetch('/api/factures/ff-monthly');
+      const data=await response.json();
+      if(!response.ok){
+        throw new Error(data.error||'Erreur API');
+      }
+      const current=Array.isArray(data.current)?data.current:[];
+      const previous=Array.isArray(data.previous)?data.previous:[];
+      barChart.data.datasets[0].data=current.length===12?current:barData;
+      barChart.data.datasets[1].data=previous.length===12?previous:barDataPrev;
+      barChart.update();
+    }catch(err){
+      console.error('Erreur chargement CA mensuel:',err);
+    }
+  }
+
+  loadMonthlyTurnover();
+
+  const activityCtx=document.getElementById('activityChart').getContext('2d');
+  const activityChart=new Chart(activityCtx,{
+    type:'pie',
+    data:{
+      labels:['Timbrage','Magasinage','Surestarie','Agent (converti)'],
+      datasets:[{
+        data:[35,25,20,20],
+        backgroundColor:['#3498db','#2ecc71','#e74c3c','#f39c12'],
+        borderWidth:2,
+        borderColor:'#fff'
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label:function(context){
+              const data=context.dataset.data||[];
+              const total=data.reduce((sum,val)=>sum+(Number(val)||0),0);
+              const value=Number(context.parsed)||0;
+              return `${context.label}:${value}(Total:${total})`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  async function loadActivityData(){
+    try{
+      const response=await fetch('/api/factures/ff-activity');
+      const data=await response.json();
+      if(!response.ok){
+        throw new Error(data.error||'Erreur API');
+      }
+      document.querySelector('[data-activity-value="timbrage"]').textContent=data.timbrage||0;
+      document.querySelector('[data-activity-value="magasinage"]').textContent=data.magasinage||0;
+      document.querySelector('[data-activity-value="agent"]').textContent=data.agent||0;
+      document.querySelector('[data-activity-value="surestarie"]').textContent=data.surestarie||0;
+      activityChart.data.labels=['Timbrage','Magasinage','Agent','Surestarie'];
+      activityChart.data.datasets[0].data=[
+        data.timbrage||0,
+        data.magasinage||0,
+        data.agent||0,
+        data.surestarie||0
+      ];
+      activityChart.data.datasets[0].backgroundColor=['#3498db','#2ecc71','#f39c12','#e74c3c'];
+      activityChart.update();
+    }catch(err){
+      console.error('Erreur chargement activité:',err);
+    }
+  }
+
+  function renderDeviseChart(labels,values){
+    if(!deviseChartCanvas) return;
+    const ctx=deviseChartCanvas.getContext('2d');
+    if(!deviseChart){
+      deviseChart=new Chart(ctx,{
+        type:'bar',
+        data:{
+          labels,
+          datasets:[
+            {
+              label:'Marge sur fret',
+              data:values,
+              backgroundColor:'rgba(52,152,219,0.6)',
+              borderColor:'#3498db',
+              borderWidth:1
+            }
+          ]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{legend:{display:false}},
+          scales:{
+            y:{beginAtZero:true,grid:{color:'rgba(0,0,0,0.05)'}},
+            x:{grid:{color:'rgba(0,0,0,0.05)'}}
+          },
+          onClick:async function(evt,elements){
+            if(!elements.length) return;
+            const index=elements[0].index;
+            const devise=this.data.labels[index];
+            if(devise){
+              const items=listCache.freight||await fetchFreightItems();
+              renderDeviseCommercialSummary(items,devise);
+            }
+          }
+        }
+      });
+    }else{
+      deviseChart.data.labels=labels;
+      deviseChart.data.datasets[0].data=values;
+      deviseChart.update();
+    }
+  }
+
+  async function loadDeviseChart(){
+    try{
+      const response=await fetch('/api/freight/by-devise');
+      const data=await response.json();
+      if(!response.ok){
+        throw new Error(data.error||'Erreur API');
+      }
+      const items=Array.isArray(data.items)?data.items:[];
+      const labels=items.map(item=>item.devise||'N/A');
+      const values=items.map(item=>item.total_marge||0);
+      renderDeviseChart(labels,values);
+      const freightItems=await fetchFreightItems();
+      renderDeviseCommercialSummary(freightItems);
+      if(currencyContainer){
+        currencyContainer.classList.add('visible');
+      }
+    }catch(err){
+      console.error('Erreur chargement devise:',err);
+    }
+  }
+
+  async function showFreightByDevise(devise){
+    try{
+      if(listLoading) listLoading.classList.add('visible');
+      const items=await fetchFreightItems();
+      listMode='detail';
+      currentListKey='generated';
+      if(listBack) listBack.style.display='inline-flex';
+      listTitle.textContent=`Détails - ${devise}`;
+      currentColumns=columnSets.freightDetails;
+      renderColumns(currentColumns);
+      currentItems=items
+        .filter(i=>(i.devise||'N/A')===devise)
+        .map(i=>({
+          ...i,
+          marge:(Number(i.mont_vente)||0)-(Number(i.mont_achat)||0)
+        }));
+      currentPage=1;
+      applySearchFilter();
+      document.body.classList.add('chart-only','show-chart-list');
+    }catch(err){
+      listTableBody.innerHTML=`
+        <tr>
+          <td colspan="${(currentColumns||[]).length}">Erreur chargement:${err.message}</td>
+        </tr>
+      `;
+    }finally{
+      if(listLoading) listLoading.classList.remove('visible');
+    }
+  }
+
+  async function showFreightByCommercial(commercial){
+    try{
+      if(listLoading) listLoading.classList.add('visible');
+      const items=await fetchFreightItems();
+      listMode='detail';
+      currentListKey='generated';
+      commercialFilter=commercial;
+      if(listBack) listBack.style.display='inline-flex';
+      listTitle.textContent=`Dossiers - ${commercial}`;
+      currentColumns=columnSets.freightCommercialDetails;
+      renderColumns(currentColumns);
+      currentItems=items
+        .filter(i=>(i.email_utilisateur||i.id_utilisateur||'Non assigné')===commercial)
+        .map(i=>({
+          ...i,
+          marge:(Number(i.mont_vente)||0)-(Number(i.mont_achat)||0)
+        }));
+      currentPage=1;
+      applySearchFilter();
+    }catch(err){
+      listTableBody.innerHTML=`
+        <tr>
+          <td colspan="${(currentColumns||[]).length}">Erreur chargement:${err.message}</td>
+        </tr>
+      `;
+    }finally{
+      if(listLoading) listLoading.classList.remove('visible');
+    }
+  }
+
+  loadActivityData();
+});
+</script>
 {% endblock %}
