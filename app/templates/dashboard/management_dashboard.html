@@ -205,6 +205,19 @@
     background: #f8f9fa;
   }
 
+  /* Make table headers sticky so they remain visible when scrolling */
+  .table-responsive {
+    max-height: 60vh;
+    overflow: auto;
+  }
+
+  .list-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #f8f9fa;
+  }
+
   .column-toggle {
     position: relative;
   }
