@@ -459,7 +459,7 @@
     </div>
     <div class="kpi-card" data-key="invoices" style="border-left-color: var(--color-success);">
       <div class="kpi-title">Factures (mois)</div>
-      <div class="kpi-value">0</div>
+      <div class="kpi-value" data-kpi-value="invoices">0</div>
       <div class="kpi-sub">Liste vide</div>
     </div>
   </div>
@@ -1007,8 +1007,24 @@
         try {
           const items = await fetchInvoices();
           setKpiValue('not-stamped', items.length);
+          // compute invoices in current month
+          try {
+            const now = new Date();
+            const curYear = now.getFullYear();
+            const curMonth = now.getMonth() + 1; // 1..12
+            const monthCount = items.reduce((count, it) => {
+              if (!it.date_process) return count;
+              const d = new Date(it.date_process);
+              if (Number.isNaN(d.getTime())) return count;
+              return count + ((d.getFullYear() === curYear && (d.getMonth() + 1) === curMonth) ? 1 : 0);
+            }, 0);
+            setKpiValue('invoices', monthCount);
+          } catch (e) {
+            setKpiValue('invoices', items.length);
+          }
         } catch {
           setKpiValue('not-stamped', 0);
+          setKpiValue('invoices', 0);
         }
       }
 
