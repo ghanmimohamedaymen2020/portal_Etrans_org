@@ -878,9 +878,10 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  function renderDeviseCommercialSummary(items,deviseFilter=null){
+  function renderDeviseCommercialSummary(items,deviseFilter=null,monthIndex=null,year=null){
     if(!deviseCommercialBody) return;
     const grouped=new Map();
+    const monthNames=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
     items.forEach(item=>{
       const devise=item.devise||'N/A';
       if(deviseFilter&&devise!==deviseFilter) return;
@@ -908,7 +909,13 @@ document.addEventListener('DOMContentLoaded',function(){
       return a.commercial.localeCompare(b.commercial,'fr');
     });
     if(deviseCommercialFilter){
-      deviseCommercialFilter.textContent=deviseFilter?`Devise:${deviseFilter}`:'';
+      let txt='';
+      if(deviseFilter) txt+=`Devise: ${deviseFilter}`;
+      if(monthIndex!==null){
+        if(txt) txt+= ' — ';
+        txt+= `${monthNames[monthIndex]}` + (year?` ${year}`:'');
+      }
+      deviseCommercialFilter.textContent=txt;
     }
     if(!data.length){
       deviseCommercialBody.innerHTML=`
@@ -1435,9 +1442,37 @@ document.addEventListener('DOMContentLoaded',function(){
           if(!elements.length) return;
           const el=elements[0];
           const datasetIndex=el.datasetIndex;
+          const monthIndex=(el.index!==undefined?el.index:(el.dataIndex!==undefined?el.dataIndex:el._index));
           const currency=this.data.datasets[datasetIndex].label;
-          if(currency){
-            showFreightByDevise(currency);
+          const yearSelect=document.getElementById('devise-year-select');
+          const selYear=yearSelect?Number(yearSelect.value):new Date().getFullYear();
+          if(!currency) return;
+          try{
+            const freightItems=await fetchFreightItems();
+            const filtered=freightItems.filter(i=>{
+              const d=i.date_creation||i.date_process||i.date||null;
+              if(!d) return false;
+              const dt=new Date(d);
+              if(Number.isNaN(dt.getTime())) return false;
+              if(dt.getFullYear()!==selYear) return false;
+              if(dt.getMonth()!==monthIndex) return false;
+              return (i.devise||'N/A')===currency;
+            });
+            renderDeviseCommercialSummary(filtered,currency,monthIndex,selYear);
+            // also show detailed list for the selected currency/month/year
+            listMode='detail';
+            currentListKey='generated';
+            if(listBack) listBack.style.display='inline-flex';
+            const monthNames=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+            listTitle.textContent=`Détails - ${currency} ${monthNames[monthIndex]||''} ${selYear}`;
+            currentColumns=columnSets.freightCommercialDetails;
+            renderColumns(currentColumns);
+            currentItems=filtered.map(i=>({ ...i, marge:(Number(i.mont_vente)||0)-(Number(i.mont_achat)||0) }));
+            currentPage=1;
+            applySearchFilter();
+            document.body.classList.add('chart-only','show-chart-list');
+          }catch(err){
+            console.error('Erreur filtrage par devise/mois:',err);
           }
         }
       }
