@@ -571,12 +571,10 @@ body.chart-only.show-chart-list .list-section {
 <div class="chart-container currency-container" id="currency-container">
   <div class="chart-header">
     <h2>Marge sur fret par devise</h2>
-    <div class="chart-controls" style="display:flex;gap:8px;align-items:center;">
-      <label style="font-size:0.95rem;color:#6c757d;">Année:
-        <select id="devise-year-select" style="margin-left:6px;padding:4px 6px;border:1px solid var(--color-border);border-radius:6px;background:#fff;"></select>
-      </label>
-      <label style="font-size:0.95rem;color:#6c757d;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="devise-monthly-toggle"> Par mois</label>
-    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+    <label for="devise-year-select" class="filter-label">Année :</label>
+    <select id="devise-year-select" class="list-page-size"></select>
   </div>
   <div class="chart-wrapper">
     <canvas id="deviseChart"></canvas>
@@ -1418,150 +1416,94 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   function renderDeviseChart(labels,values){
+    // New multi-dataset renderer (labels = months, values = datasets array)
     if(!deviseChartCanvas) return;
     const ctx=deviseChartCanvas.getContext('2d');
-    const createColors=(n)=>Array.from({length:n},(v,i)=>`hsl(${(i*47)%360} 70% 50% / 0.75)`);
-    if(!deviseChart){
-      deviseChart=new Chart(ctx,{
-        type:'bar',
-        data:{labels,datasets:values},
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          plugins:{legend:{display:true}},
-          scales:{
-            y:{beginAtZero:true,grid:{color:'rgba(0,0,0,0.05)'}},
-            x:{grid:{color:'rgba(0,0,0,0.05)'}}
-          },
-          onClick:async function(evt,elements){
-            if(!elements.length) return;
-            const el=elements[0];
-            const datasetIndex=el.datasetIndex;
-            const index=el.index;
-            const dataset=this.data.datasets[datasetIndex];
-            const label=dataset?dataset.label:null;
-            if(label){
-              const items=listCache.freight||await fetchFreightItems();
-              renderDeviseCommercialSummary(items,label);
-            }
+    const config={
+      type:'bar',
+      data:{ labels, datasets: values },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{ legend:{ display:true, position:'top' } },
+        layout:{ padding:{ left:12, right:12, top:6, bottom:6 } },
+        scales:{
+          y:{ beginAtZero:true, grid:{ color:'rgba(0,0,0,0.05)' } },
+          x:{ grid:{ color:'rgba(0,0,0,0.05)' }, offset:true, ticks:{ autoSkip:false, maxRotation:0, minRotation:0 } }
+        },
+        onClick:async function(evt,elements){
+          if(!elements.length) return;
+          const el=elements[0];
+          const datasetIndex=el.datasetIndex;
+          const currency=this.data.datasets[datasetIndex].label;
+          if(currency){
+            showFreightByDevise(currency);
           }
         }
-      });
+      }
+    };
+    if(!deviseChart){
+      deviseChart=new Chart(ctx,config);
     }else{
-      deviseChart.data.labels=labels;
-      deviseChart.data.datasets=values;
+      deviseChart.config.type=config.type;
+      deviseChart.data.labels=config.data.labels;
+      deviseChart.data.datasets=config.data.datasets;
+      deviseChart.options=config.options;
       deviseChart.update();
     }
   }
 
-  function buildAnnualDatasets(items){
-    const grouped=new Map();
-    items.forEach(it=>{
-      const devise=it.devise||'N/A';
-      const achat=Number(it.mont_achat)||0;
-      const vente=Number(it.mont_vente)||0;
-      const marge=vente-achat;
-      grouped.set(devise,(grouped.get(devise)||0)+marge);
-    });
-    const labels=Array.from(grouped.keys());
-    const data=Array.from(grouped.values()).map(v=>Number(v.toFixed(2)));
-    return {labels,dataset:[{label:'Marge sur fret',data:data,backgroundColor:'rgba(52,152,219,0.6)',borderColor:'#3498db',borderWidth:1}]};
-  }
-
-  function buildMonthlyStackedDatasets(items,year){
-    const months=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
-    const map=new Map();
-    items.forEach(it=>{
-      const dateStr=it.date_creation||it.date_process||it.date||it.created_at||null;
-      const d=new Date(dateStr);
-      if(Number.isNaN(d.getTime())) return;
-      if(d.getFullYear()!==Number(year)) return;
-      const mIndex=d.getMonth();
-      const devise=it.devise||'N/A';
-      const achat=Number(it.mont_achat)||0;
-      const vente=Number(it.mont_vente)||0;
-      const marge=vente-achat;
-      if(!map.has(devise)) map.set(devise,new Array(12).fill(0));
-      map.get(devise)[mIndex]+=marge;
-    });
-    const labels=months;
-    const datasets=Array.from(map.entries()).map(([devise,arr],i)=>({
-      label:devise,
-      data:arr.map(v=>Number(v.toFixed(2))),
-      backgroundColor:`hsl(${(i*47)%360} 70% 50% / 0.75)`,
-      borderWidth:1
-    }));
-    return {labels,datasets};
-  }
-
-  async function populateDeviseControls(){
+  async function loadDeviseChart(year){
     try{
-      const items=listCache.freight||await fetchFreightItems();
-      const years=new Set();
-      items.forEach(it=>{
-        const dateStr=it.date_creation||it.date_process||it.date||it.created_at||null;
-        const d=new Date(dateStr);
-        if(Number.isNaN(d.getTime())) return;
-        years.add(d.getFullYear());
-      });
-      const arr=Array.from(years).sort((a,b)=>b-a);
-      const sel=document.getElementById('devise-year-select');
-      if(!sel) return;
-      sel.innerHTML='';
-      if(arr.length===0){
-        const opt=document.createElement('option');opt.value=new Date().getFullYear();opt.textContent=new Date().getFullYear();sel.appendChild(opt);
-      }else{
-        arr.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;sel.appendChild(o);});
-      }
-    }catch(err){console.error(err);}    
-  }
-
-  async function updateDeviseView(){
-    try{
-      const items=listCache.freight||await fetchFreightItems();
-      const yearSel=document.getElementById('devise-year-select');
-      const monthlyToggle=document.getElementById('devise-monthly-toggle');
-      const year=yearSel?yearSel.value:new Date().getFullYear();
-      if(monthlyToggle&&monthlyToggle.checked){
-        const {labels,datasets}=buildMonthlyStackedDatasets(items,year);
-        // set stacked options
-        const cfg={labels,datasets};
-        renderDeviseChart(labels,datasets);
-        // enable stacking via chart options
-        if(deviseChart){
-          deviseChart.options.scales.x.stacked=true;
-          deviseChart.options.scales.y.stacked=true;
-          deviseChart.update();
-        }
-      }else{
-        const result=buildAnnualDatasets(items);
-        renderDeviseChart(result.labels,result.dataset);
-        if(deviseChart){
-          if(deviseChart.options.scales.x) deviseChart.options.scales.x.stacked=false;
-          if(deviseChart.options.scales.y) deviseChart.options.scales.y.stacked=false;
-          deviseChart.update();
-        }
-      }
-    }catch(err){console.error('Erreur updateDeviseView',err);}  
-  }
-
-  async function loadDeviseChart(){
-    try{
-      // Prefer client-side aggregation from freight items so we can show monthly/yearly views
       const freightItems=await fetchFreightItems();
-      await populateDeviseControls();
-      // initial render: annual totals
-      const annual=buildAnnualDatasets(freightItems);
-      renderDeviseChart(annual.labels,annual.dataset);
+      // build available years
+      const years=new Set();
+      freightItems.forEach(i=>{
+        const d=i.date_creation||i.date_process||i.date||null;
+        if(d){
+          const y=new Date(d).getFullYear();
+          if(!Number.isNaN(y)) years.add(y);
+        }
+      });
+      const yearSelect=document.getElementById('devise-year-select');
+      if(yearSelect){
+        const arr=Array.from(years).sort((a,b)=>b-a);
+        if(!arr.length) arr.push(new Date().getFullYear());
+        yearSelect.innerHTML=arr.map(y=>`<option value="${y}" ${y===(year||arr[0])?'selected':''}>${y}</option>`).join('');
+        yearSelect.onchange=function(){ loadDeviseChart(parseInt(this.value,10)); };
+      }
+      const selYear=year||Number(yearSelect?.value)||new Date().getFullYear();
+      const monthLabels=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+      // aggregate per currency per month
+      const map={};
+      freightItems.forEach(i=>{
+        const d=i.date_creation||i.date_process||i.date||null;
+        if(!d) return;
+        const dt=new Date(d);
+        if(Number.isNaN(dt.getTime())) return;
+        if(dt.getFullYear()!==selYear) return;
+        const m=dt.getMonth();
+        const cur=i.devise||'N/A';
+        const achat=Number(i.mont_achat)||0;
+        const vente=Number(i.mont_vente)||0;
+        const marge=vente-achat;
+        if(!map[cur]) map[cur]=new Array(12).fill(0);
+        map[cur][m]+=marge;
+      });
+      const palette=['#3498db','#2ecc71','#e74c3c','#f39c12','#9b59b6','#1abc9c','#34495e'];
+      const datasets=Object.keys(map).map((cur,i)=>({
+        label:cur,
+        data:map[cur].map(v=>Math.round(v)),
+        backgroundColor:palette[i%palette.length]+'99',
+        borderColor:palette[i%palette.length],
+        borderWidth:1,
+        barPercentage:0.6,
+        categoryPercentage:0.8,
+        maxBarThickness:80
+      }));
+      renderDeviseChart(monthLabels,datasets);
       renderDeviseCommercialSummary(freightItems);
-      if(currencyContainer){ currencyContainer.classList.add('visible'); }
-      // wire controls
-      const yearSel=document.getElementById('devise-year-select');
-      const monthlyToggle=document.getElementById('devise-monthly-toggle');
-      if(yearSel) yearSel.addEventListener('change',updateDeviseView);
-      if(monthlyToggle) monthlyToggle.addEventListener('change',updateDeviseView);
-      // ensure view reflects current control state
-      updateDeviseView();
+      if(currencyContainer) currencyContainer.classList.add('visible');
     }catch(err){
       console.error('Erreur chargement devise:',err);
     }
