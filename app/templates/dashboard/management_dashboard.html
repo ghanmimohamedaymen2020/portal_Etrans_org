@@ -571,6 +571,12 @@ body.chart-only.show-chart-list .list-section {
 <div class="chart-container currency-container" id="currency-container">
   <div class="chart-header">
     <h2>Marge sur fret par devise</h2>
+    <div class="chart-controls" style="display:flex;gap:8px;align-items:center;">
+      <label style="font-size:0.95rem;color:#6c757d;">Année:
+        <select id="devise-year-select" style="margin-left:6px;padding:4px 6px;border:1px solid var(--color-border);border-radius:6px;background:#fff;"></select>
+      </label>
+      <label style="font-size:0.95rem;color:#6c757d;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="devise-monthly-toggle"> Par mois</label>
+    </div>
   </div>
   <div class="chart-wrapper">
     <canvas id="deviseChart"></canvas>
@@ -1414,63 +1420,148 @@ document.addEventListener('DOMContentLoaded',function(){
   function renderDeviseChart(labels,values){
     if(!deviseChartCanvas) return;
     const ctx=deviseChartCanvas.getContext('2d');
+    const createColors=(n)=>Array.from({length:n},(v,i)=>`hsl(${(i*47)%360} 70% 50% / 0.75)`);
     if(!deviseChart){
       deviseChart=new Chart(ctx,{
         type:'bar',
-        data:{
-          labels,
-          datasets:[
-            {
-              label:'Marge sur fret',
-              data:values,
-              backgroundColor:'rgba(52,152,219,0.6)',
-              borderColor:'#3498db',
-              borderWidth:1
-            }
-          ]
-        },
+        data:{labels,datasets:values},
         options:{
           responsive:true,
           maintainAspectRatio:false,
-          plugins:{legend:{display:false}},
+          plugins:{legend:{display:true}},
           scales:{
             y:{beginAtZero:true,grid:{color:'rgba(0,0,0,0.05)'}},
             x:{grid:{color:'rgba(0,0,0,0.05)'}}
           },
           onClick:async function(evt,elements){
             if(!elements.length) return;
-            const index=elements[0].index;
-            const devise=this.data.labels[index];
-            if(devise){
+            const el=elements[0];
+            const datasetIndex=el.datasetIndex;
+            const index=el.index;
+            const dataset=this.data.datasets[datasetIndex];
+            const label=dataset?dataset.label:null;
+            if(label){
               const items=listCache.freight||await fetchFreightItems();
-              renderDeviseCommercialSummary(items,devise);
+              renderDeviseCommercialSummary(items,label);
             }
           }
         }
       });
     }else{
       deviseChart.data.labels=labels;
-      deviseChart.data.datasets[0].data=values;
+      deviseChart.data.datasets=values;
       deviseChart.update();
     }
   }
 
+  function buildAnnualDatasets(items){
+    const grouped=new Map();
+    items.forEach(it=>{
+      const devise=it.devise||'N/A';
+      const achat=Number(it.mont_achat)||0;
+      const vente=Number(it.mont_vente)||0;
+      const marge=vente-achat;
+      grouped.set(devise,(grouped.get(devise)||0)+marge);
+    });
+    const labels=Array.from(grouped.keys());
+    const data=Array.from(grouped.values()).map(v=>Number(v.toFixed(2)));
+    return {labels,dataset:[{label:'Marge sur fret',data:data,backgroundColor:'rgba(52,152,219,0.6)',borderColor:'#3498db',borderWidth:1}]};
+  }
+
+  function buildMonthlyStackedDatasets(items,year){
+    const months=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+    const map=new Map();
+    items.forEach(it=>{
+      const dateStr=it.date_creation||it.date_process||it.date||it.created_at||null;
+      const d=new Date(dateStr);
+      if(Number.isNaN(d.getTime())) return;
+      if(d.getFullYear()!==Number(year)) return;
+      const mIndex=d.getMonth();
+      const devise=it.devise||'N/A';
+      const achat=Number(it.mont_achat)||0;
+      const vente=Number(it.mont_vente)||0;
+      const marge=vente-achat;
+      if(!map.has(devise)) map.set(devise,new Array(12).fill(0));
+      map.get(devise)[mIndex]+=marge;
+    });
+    const labels=months;
+    const datasets=Array.from(map.entries()).map(([devise,arr],i)=>({
+      label:devise,
+      data:arr.map(v=>Number(v.toFixed(2))),
+      backgroundColor:`hsl(${(i*47)%360} 70% 50% / 0.75)`,
+      borderWidth:1
+    }));
+    return {labels,datasets};
+  }
+
+  async function populateDeviseControls(){
+    try{
+      const items=listCache.freight||await fetchFreightItems();
+      const years=new Set();
+      items.forEach(it=>{
+        const dateStr=it.date_creation||it.date_process||it.date||it.created_at||null;
+        const d=new Date(dateStr);
+        if(Number.isNaN(d.getTime())) return;
+        years.add(d.getFullYear());
+      });
+      const arr=Array.from(years).sort((a,b)=>b-a);
+      const sel=document.getElementById('devise-year-select');
+      if(!sel) return;
+      sel.innerHTML='';
+      if(arr.length===0){
+        const opt=document.createElement('option');opt.value=new Date().getFullYear();opt.textContent=new Date().getFullYear();sel.appendChild(opt);
+      }else{
+        arr.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;sel.appendChild(o);});
+      }
+    }catch(err){console.error(err);}    
+  }
+
+  async function updateDeviseView(){
+    try{
+      const items=listCache.freight||await fetchFreightItems();
+      const yearSel=document.getElementById('devise-year-select');
+      const monthlyToggle=document.getElementById('devise-monthly-toggle');
+      const year=yearSel?yearSel.value:new Date().getFullYear();
+      if(monthlyToggle&&monthlyToggle.checked){
+        const {labels,datasets}=buildMonthlyStackedDatasets(items,year);
+        // set stacked options
+        const cfg={labels,datasets};
+        renderDeviseChart(labels,datasets);
+        // enable stacking via chart options
+        if(deviseChart){
+          deviseChart.options.scales.x.stacked=true;
+          deviseChart.options.scales.y.stacked=true;
+          deviseChart.update();
+        }
+      }else{
+        const result=buildAnnualDatasets(items);
+        renderDeviseChart(result.labels,result.dataset);
+        if(deviseChart){
+          if(deviseChart.options.scales.x) deviseChart.options.scales.x.stacked=false;
+          if(deviseChart.options.scales.y) deviseChart.options.scales.y.stacked=false;
+          deviseChart.update();
+        }
+      }
+    }catch(err){console.error('Erreur updateDeviseView',err);}  
+  }
+
   async function loadDeviseChart(){
     try{
-      const response=await fetch('/api/freight/by-devise');
-      const data=await response.json();
-      if(!response.ok){
-        throw new Error(data.error||'Erreur API');
-      }
-      const items=Array.isArray(data.items)?data.items:[];
-      const labels=items.map(item=>item.devise||'N/A');
-      const values=items.map(item=>item.total_marge||0);
-      renderDeviseChart(labels,values);
+      // Prefer client-side aggregation from freight items so we can show monthly/yearly views
       const freightItems=await fetchFreightItems();
+      await populateDeviseControls();
+      // initial render: annual totals
+      const annual=buildAnnualDatasets(freightItems);
+      renderDeviseChart(annual.labels,annual.dataset);
       renderDeviseCommercialSummary(freightItems);
-      if(currencyContainer){
-        currencyContainer.classList.add('visible');
-      }
+      if(currencyContainer){ currencyContainer.classList.add('visible'); }
+      // wire controls
+      const yearSel=document.getElementById('devise-year-select');
+      const monthlyToggle=document.getElementById('devise-monthly-toggle');
+      if(yearSel) yearSel.addEventListener('change',updateDeviseView);
+      if(monthlyToggle) monthlyToggle.addEventListener('change',updateDeviseView);
+      // ensure view reflects current control state
+      updateDeviseView();
     }catch(err){
       console.error('Erreur chargement devise:',err);
     }
