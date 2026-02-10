@@ -834,6 +834,10 @@ document.addEventListener('DOMContentLoaded',function(){
   async function fetchInvoices(){
     if(listCache.invoices) return listCache.invoices;
     const response=await fetch('/api/factures/aa-detail?limit=0');
+    const ct=(response.headers.get('content-type')||'').toLowerCase();
+    if(!ct.includes('application/json')){
+      throw new Error('Authentification requise ou réponse inattendue (html)');
+    }
     const data=await response.json();
     if(!response.ok){
       throw new Error(data.error||'Erreur API');
@@ -845,6 +849,10 @@ document.addEventListener('DOMContentLoaded',function(){
   async function fetchFreightItems(){
     if(listCache.freight) return listCache.freight;
     const response=await fetch('/api/freight/items');
+    const ct=(response.headers.get('content-type')||'').toLowerCase();
+    if(!ct.includes('application/json')){
+      throw new Error('Authentification requise ou réponse inattendue (html)');
+    }
     const data=await response.json();
     if(!response.ok){
       throw new Error(data.error||'Erreur API');
