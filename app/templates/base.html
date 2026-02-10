@@ -209,6 +209,15 @@
             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
+                        // Set default rows-per-page to 100 for all lists
+                        try {
+                            document.querySelectorAll('.list-page-size').forEach(function(sel) {
+                                if (sel && sel.value !== '100') {
+                                    sel.value = '100';
+                                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            });
+                        } catch (e) {}
         });
 
         // Gestion du thème sombre/clair
