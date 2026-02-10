@@ -252,6 +252,21 @@ body.list-only .list-section {
   background: #f8f9fa;
 }
 
+/* Sortable header styles */
+.list-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.list-table th.sortable::after {
+  content: '';
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+.list-table th.sortable.sort-asc::after { content: '▲'; }
+.list-table th.sortable.sort-desc::after { content: '▼'; }
+
 .table-responsive {
   flex: 1 1 auto;
   min-height: 0;
@@ -806,6 +821,7 @@ document.addEventListener('DOMContentLoaded',function(){
       listHeaderRow.appendChild(th);
     });
     renderColumnMenu(columns);
+      try{ if(typeof makeTablesSortable==='function') makeTablesSortable(); }catch(e){}
   }
 
   function renderColumnMenu(columns){
@@ -1621,6 +1637,75 @@ document.addEventListener('DOMContentLoaded',function(){
     }finally{
       if(listLoading) listLoading.classList.remove('visible');
     }
+  }
+
+  /* Generic client-side table sorter: attaches to tables with class `list-table` or `sortable` */
+  function tryParseNumber(v){
+    if(v===null||v===undefined) return null;
+    const s=String(v).replace(/[^0-9,\-\.\s]/g,'').replace(/\s+/g,'');
+    if(s.length===0) return null;
+    const n=Number(s.replace(/,/g,''));
+    return Number.isFinite(n)?n:null;
+  }
+
+  function sortTableRows(table, colIndex, asc){
+    const tbody=table.tBodies[0];
+    if(!tbody) return;
+    const rows=Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a,b)=>{
+      const aCell=a.children[colIndex];
+      const bCell=b.children[colIndex];
+      const aText=(aCell? aCell.textContent.trim() : '');
+      const bText=(bCell? bCell.textContent.trim() : '');
+      const aNum=tryParseNumber(aText);
+      const bNum=tryParseNumber(bText);
+      if(aNum!==null && bNum!==null){
+        return asc? aNum-bNum : bNum-aNum;
+      }
+      // fallback to localized string compare
+      return asc? aText.localeCompare(bText,'fr') : bText.localeCompare(aText,'fr');
+    });
+    // re-append rows
+    rows.forEach(r=>tbody.appendChild(r));
+  }
+
+  function attachSortableHeaders(table){
+    if(!table || table._sortableAttached) return;
+    const thead=table.tHead;
+    if(!thead) return;
+    const headers=Array.from(thead.querySelectorAll('th'));
+    headers.forEach((th,idx)=>{
+      th.classList.add('sortable');
+      th.style.userSelect='none';
+      th.addEventListener('click',function(){
+        // toggle sort
+        const isAsc=this.classList.toggle('sort-asc');
+        this.classList.toggle('sort-desc',!isAsc);
+        // clear other headers
+        headers.forEach(h=>{ if(h!==this){ h.classList.remove('sort-asc','sort-desc'); } });
+        sortTableRows(table, idx, isAsc);
+      });
+    });
+    table._sortableAttached=true;
+  }
+
+  function makeTablesSortable(){
+    const tables=document.querySelectorAll('table.list-table, table.sortable, table.devise-commercial-table');
+    tables.forEach(t=>attachSortableHeaders(t));
+    // observe for dynamic changes (e.g., renderColumns replaces thead)
+    const observer=new MutationObserver(muts=>{
+      muts.forEach(m=>{
+        m.addedNodes && m.addedNodes.forEach(node=>{
+          if(node.nodeType===1 && node.matches && node.matches('table.list-table, table.sortable')){
+            attachSortableHeaders(node);
+          }
+          if(node.querySelectorAll){
+            node.querySelectorAll && node.querySelectorAll('table.list-table, table.sortable').forEach(t=>attachSortableHeaders(t));
+          }
+        });
+      });
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
   }
 
   loadActivityData();
