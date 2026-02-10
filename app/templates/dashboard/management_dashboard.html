@@ -603,6 +603,7 @@ body.chart-only.show-chart-list .list-section {
   </div>
 </div>
 
+{% if request.args.get('listOnly') %}
 <div class="list-section" id="list-section" aria-live="polite">
   <div class="list-header">
     <div class="list-title" id="list-title">Liste</div>
@@ -641,7 +642,9 @@ body.chart-only.show-chart-list .list-section {
       <tbody></tbody>
     </table>
   </div>
+  </div>
 </div>
+{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -950,7 +953,7 @@ document.addEventListener('DOMContentLoaded',function(){
         url.searchParams.set('list','generated');
         url.searchParams.set('listOnly','1');
         url.searchParams.set('commercial',commercial);
-        window.location.href=url.toString();
+        window.open(url.toString(),'_blank');
       });
     });
     deviseCommercialBody.querySelectorAll('.commercial-link').forEach(button=>{
@@ -962,7 +965,7 @@ document.addEventListener('DOMContentLoaded',function(){
         url.searchParams.set('list','generated');
         url.searchParams.set('listOnly','1');
         url.searchParams.set('commercial',commercial);
-        window.location.href=url.toString();
+        window.open(url.toString(),'_blank');
       });
     });
   }
@@ -1144,11 +1147,10 @@ document.addEventListener('DOMContentLoaded',function(){
         tr.addEventListener('click',function(){
           const commercial=item.commercial;
           if(!commercial) return;
-          const url=new URL(window.location.href);
-          url.searchParams.set('list','generated');
-          url.searchParams.set('listOnly','1');
-          url.searchParams.set('commercial',commercial);
-          window.location.href=url.toString();
+          if(typeof showFreightByCommercial==='function'){
+            showFreightByCommercial(commercial);
+            document.body.classList.add('chart-only','show-chart-list');
+          }
         });
       }
       listTableBody.appendChild(tr);
@@ -1467,6 +1469,11 @@ document.addEventListener('DOMContentLoaded',function(){
               return (i.devise||'N/A')===currency;
             });
             renderDeviseCommercialSummary(filtered,currency,monthIndex,selYear);
+            // If the page was opened with ?listOnly=1 we must NOT force-open the detailed list view
+            const _urlParams = new URLSearchParams(window.location.search || '');
+            if(_urlParams.get('listOnly')){
+              return;
+            }
             // also show detailed list for the selected currency/month/year
             listMode='detail';
             currentListKey='generated';
@@ -1546,6 +1553,13 @@ document.addEventListener('DOMContentLoaded',function(){
       }));
       renderDeviseChart(monthLabels,datasets);
       renderDeviseCommercialSummary(freightItems);
+      // Ensure details panel is hidden on initial chart load and summary tab active
+      const detailsPanel=document.getElementById('devise-details');
+      if(detailsPanel) detailsPanel.style.display='none';
+      const tabSummary=document.getElementById('tab-summary');
+      const tabDetails=document.getElementById('tab-details');
+      if(tabSummary) tabSummary.classList.add('active');
+      if(tabDetails) tabDetails.classList.remove('active');
       if(currencyContainer) currencyContainer.classList.add('visible');
     }catch(err){
       console.error('Erreur chargement devise:',err);
