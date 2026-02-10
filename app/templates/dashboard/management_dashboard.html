@@ -423,6 +423,13 @@ body.chart-only.show-chart-list .list-section {
   padding: 10px 12px;
   border-bottom: 1px solid #eef1f4;
   text-align: left;
+.list-section-mini {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--box-shadow);
+}
 }
 
 .devise-commercial-table th {
@@ -580,14 +587,15 @@ body.chart-only.show-chart-list .list-section {
     <canvas id="deviseChart"></canvas>
   </div>
   <div class="devise-commercial-summary">
-    <div class="devise-commercial-header">
-      <div>
-        <h3 id="devise-commercial-title">Totaux par commercial</h3>
+    <div class="list-header" style="margin-bottom:8px;">
+      <div class="list-title" id="devise-commercial-title">Totaux par commercial</div>
+      <div class="list-actions" style="align-items:center;gap:8px;">
         <div class="filter-label" id="devise-commercial-filter"></div>
       </div>
     </div>
     <div class="table-responsive">
-      <table class="devise-commercial-table">
+      <table class="list-table" >
+      <!--      <table class="list-table devise-commercial-table">-->
         <thead>
           <tr>
             <th>Devise</th>
@@ -939,26 +947,15 @@ document.addEventListener('DOMContentLoaded',function(){
     deviseCommercialBody.innerHTML=data.map(row=>`
       <tr class="commercial-row" data-commercial="${row.commercial}">
         <td>${row.devise}</td>
-        <td><button type="button" class="commercial-link" data-commercial="${row.commercial}">${row.commercial}</button></td>
+        <td data-commercial="${row.commercial}">${row.commercial}</td>
         <td>${formatAmount(row.total_achat)}</td>
         <td>${formatAmount(row.total_vente)}</td>
         <td>${formatAmount(row.total_marge)}</td>
       </tr>
     `).join('');
+    // clicking the row opens the commercial details in a new tab
     deviseCommercialBody.querySelectorAll('.commercial-row').forEach(row=>{
       row.addEventListener('click',function(){
-        const commercial=this.getAttribute('data-commercial');
-        if(!commercial) return;
-        const url=new URL(window.location.href);
-        url.searchParams.set('list','generated');
-        url.searchParams.set('listOnly','1');
-        url.searchParams.set('commercial',commercial);
-        window.open(url.toString(),'_blank');
-      });
-    });
-    deviseCommercialBody.querySelectorAll('.commercial-link').forEach(button=>{
-      button.addEventListener('click',function(event){
-        event.stopPropagation();
         const commercial=this.getAttribute('data-commercial');
         if(!commercial) return;
         const url=new URL(window.location.href);
