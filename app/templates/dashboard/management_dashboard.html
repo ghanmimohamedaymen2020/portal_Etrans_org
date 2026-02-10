@@ -48,6 +48,13 @@
     padding: 12px 18px;
   }
 
+  /* Remove extra vertical whitespace and make lists fill available height */
+  body.list-only .navbar-spacer { display: none !important; }
+  body.list-only main { padding: 0 !important; }
+  body.list-only .list-section { padding: 0 12px 6px 12px !important; margin-bottom: 0 !important; }
+  body.list-only .table-responsive { max-height: calc(100vh - 140px); overflow: auto; }
+  body.list-only main .chart-wrapper, body.list-only .chart-container { display: none !important; }
+
   .dashboard-header {
     display: flex;
     justify-content: space-between;
