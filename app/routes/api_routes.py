@@ -556,6 +556,99 @@ def get_ff_monthly_activity_totals():
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
+
+@api_bp.route('/factures/ff-list', methods=['GET'])
+@login_required
+def get_ff_list():
+    """Return rows from View_FF_Entete for a given month/year with FF totals when available."""
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    if month is None or year is None:
+        from datetime import datetime
+        now = datetime.utcnow()
+        if month is None:
+            month = now.month
+        if year is None:
+            year = now.year
+
+    try:
+        # Inspect available columns
+        entete_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_FF_Entete'
+        """)).scalars().all()
+        total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_FF_Total'
+        """)).scalars().all()
+        entete_set = {c for c in entete_cols}
+        total_set = {c for c in total_cols}
+
+        # Build select list mapping to frontend keys
+        select_parts = [
+            'e.FF_H_DateProcess AS date_process',
+            'e.FF_H_Dossier AS dossier'
+        ]
+        if 'FF_H_NomClient' in entete_set:
+            select_parts.append('e.FF_H_NomClient AS nom_client')
+        else:
+            select_parts.append("NULL AS nom_client")
+        if 'FF_H_ETA' in entete_set:
+            select_parts.append('e.FF_H_ETA AS eta')
+        else:
+            select_parts.append("NULL AS eta")
+        if 'FF_H_House' in entete_set:
+            select_parts.append('e.FF_H_House AS house')
+        else:
+            select_parts.append("NULL AS house")
+        if 'FF_H_Service' in entete_set:
+            select_parts.append('e.FF_H_Service AS service')
+        else:
+            select_parts.append("NULL AS service")
+        # Commercial name if present
+        if 'FF_H_NomCommercial' in entete_set:
+            select_parts.append('e.FF_H_NomCommercial AS nom_commercial')
+        elif 'FF_H_IdCommercial' in entete_set:
+            select_parts.append('e.FF_H_IdCommercial AS nom_commercial')
+        else:
+            select_parts.append("NULL AS nom_commercial")
+
+        # Add FF total columns when available
+        if 'FF_T_TotalNonSoumis' in total_set:
+            select_parts.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+        else:
+            select_parts.append("NULL AS ff_total_non_soumis")
+        if 'FF_T_TotalSoumis' in total_set:
+            select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis')
+        else:
+            select_parts.append("NULL AS ff_total_soumis")
+        if 'FF_T_TotalTVA' in total_set:
+            select_parts.append('t.FF_T_TotalTVA AS ff_total_tva')
+        else:
+            select_parts.append("NULL AS ff_total_tva")
+
+        # Include total TTC if present
+        if 'FF_T_TotalTTC' in total_set:
+            select_parts.append('t.FF_T_TotalTTC AS total_ttc')
+        else:
+            select_parts.append("NULL AS total_ttc")
+
+        sql = text(f"""
+            SELECT {', '.join(select_parts)}
+            FROM [dbo].[View_FF_Entete] e
+            LEFT JOIN [dbo].[View_FF_Total] t
+              ON t.FF_T_NumFact = e.FF_H_NumFact
+            WHERE MONTH(e.FF_H_DateProcess) = :month
+              AND YEAR(e.FF_H_DateProcess) = :year
+            ORDER BY e.FF_H_DateProcess DESC
+        """)
+
+        rows = db.session.execute(sql, {'month': month, 'year': year}).mappings().all()
+        factures = [dict(row) for row in rows]
+        return jsonify({'factures': factures, 'total': len(factures)})
+    except Exception as exc:
+        return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500
+
 @api_bp.route('/freight/by-devise', methods=['GET'])
 @login_required
 def get_freight_by_devise():
