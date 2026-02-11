@@ -982,7 +982,7 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  async function renderList(key){
+  async function renderList(key, opts={}){
     const data=listData[key];
     if(!data) return;
     currentListKey=key;
@@ -1006,15 +1006,26 @@ document.addEventListener('DOMContentLoaded',function(){
         if(key==='not-stamped'){
           setKpiValue('not-stamped',items.length);
         }
-        // Filtrer les factures du mois courant pour la liste 'invoices'
+        // Filtrer les factures pour la liste 'invoices' (optionnel: mois/année)
         if(key==='invoices'){
-          const now=new Date();
-          const curYear=now.getFullYear();
-          const curMonth=now.getMonth()+1;
+          let monthFilter=null;
+          let yearFilter=null;
+          if(opts && typeof opts.month!=='undefined' && opts.month!==null){
+            monthFilter=Number(opts.month); // 1-based month
+          }
+          if(opts && typeof opts.year!=='undefined' && opts.year!==null){
+            yearFilter=Number(opts.year);
+          }
+          if(monthFilter===null || yearFilter===null){
+            const now=new Date();
+            if(monthFilter===null) monthFilter=now.getMonth()+1;
+            if(yearFilter===null) yearFilter=now.getFullYear();
+          }
           items=items.filter(it=>{
             if(!it.date_process) return false;
             const d=new Date(it.date_process);
-            return d.getFullYear()===curYear && (d.getMonth()+1)===curMonth;
+            if(Number.isNaN(d.getTime())) return false;
+            return d.getFullYear()===yearFilter && (d.getMonth()+1)===monthFilter;
           });
         }
       }catch(err){
@@ -1214,18 +1225,23 @@ document.addEventListener('DOMContentLoaded',function(){
   const chartParam=urlParams.get('chart');
   const deviseParam=urlParams.get('devise');
   const commercialParam=urlParams.get('commercial');
+  const listMonthParam = urlParams.get('list_month');
+  const listYearParam = urlParams.get('list_year');
   if(listOnlyParam){
     document.body.classList.add('list-only');
   }
   if(listOnlyParam&&listParam){
     const activeCard=document.querySelector(`.kpi-card[data-key="${listParam}"]`);
     if(activeCard) activeCard.classList.add('active');
+    const opts={};
+    if(listMonthParam) opts.month=Number(listMonthParam);
+    if(listYearParam) opts.year=Number(listYearParam);
     if(listParam==='generated'&&commercialParam){
       showFreightByCommercial(commercialParam);
     }else if(listParam==='generated'&&deviseParam){
       showFreightByDevise(deviseParam);
     }else{
-      renderList(listParam);
+      renderList(listParam, opts);
     }
   }else if(chartParam==='devise'){
     document.body.classList.add('chart-only');
@@ -1342,11 +1358,20 @@ document.addEventListener('DOMContentLoaded',function(){
       maintainAspectRatio:false,
       onClick:function(evt,elements){
         if(!elements.length) return;
+        const el=elements[0];
+        const monthIndex=el.index; // 0-based index into labels
+        const datasetIndex=el.datasetIndex; // 0=current year,1=previous year
+        const now=new Date();
+        let year = now.getFullYear();
+        if(datasetIndex===1) year = year - 1;
+        const month = monthIndex + 1; // 1-based month
         const url=new URL(window.location.href);
         url.searchParams.set('list','invoices');
         url.searchParams.set('listOnly','1');
+        url.searchParams.set('list_month',String(month));
+        url.searchParams.set('list_year',String(year));
         window.open(url.toString(),'_blank');
-        renderList('invoices');
+        renderList('invoices',{month,year});
         if(listSearch) listSearch.value='';
       },
       scales:{
