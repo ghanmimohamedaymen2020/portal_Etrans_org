@@ -1454,15 +1454,30 @@ document.addEventListener('DOMContentLoaded',function(){
       const activities = data.activities && data.activities.current ? data.activities.current : null;
       const totals = Array.isArray(data.current) ? data.current : null;
 
+      // Helper: ensure we always have 12 monthly values (Jan..Dec) filling missing with 0
+      function ensureMonthlyArray(arr){
+        const out = new Array(12).fill(0);
+        if(!Array.isArray(arr)) return out;
+        for(let i=0;i<Math.min(arr.length,12);i++){
+          out[i] = Number(arr[i]) || 0;
+        }
+        return out;
+      }
+
       if(activities){
-        datasets.timbrage.data = activities.timbrage.slice();
-        datasets.magasinage.data = activities.magasinage.slice();
-        datasets.agent.data = activities.agent.slice();
-        datasets.surestarie.data = activities.surestarie.slice();
+        datasets.timbrage.data = ensureMonthlyArray(activities.timbrage);
+        datasets.magasinage.data = ensureMonthlyArray(activities.magasinage);
+        datasets.agent.data = ensureMonthlyArray(activities.agent);
+        datasets.surestarie.data = ensureMonthlyArray(activities.surestarie);
+      } else {
+        // if no activities block returned, keep arrays but ensure they're zeros
+        datasets.timbrage.data = ensureMonthlyArray(null);
+        datasets.magasinage.data = ensureMonthlyArray(null);
+        datasets.agent.data = ensureMonthlyArray(null);
+        datasets.surestarie.data = ensureMonthlyArray(null);
       }
-      if(totals && totals.length===12){
-        datasets.total.data = totals.slice();
-      }
+
+      datasets.total.data = ensureMonthlyArray(totals);
 
       // apply currently selected mode
       applyCAMode(document.getElementById('ca-mode-select').value);
