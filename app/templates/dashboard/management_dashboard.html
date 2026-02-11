@@ -95,9 +95,20 @@ body.list-only main {
 
 .kpi-section {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
   margin: 8px 0 8px;
+  align-items: stretch;
+  /* Make KPI row span the full browser width */
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  box-sizing: border-box;
+  padding-left: 24px; /* match main horizontal padding */
+  padding-right: 24px;
 }
 
 .kpi-card {
@@ -532,13 +543,17 @@ body.chart-only.show-chart-list .list-section {
   background: rgba(52,152,219,0.08);
 }
 
-@media (max-width: 992px) {
+@media (max-width: 1200px) {
   .charts-section { grid-template-columns:1fr; }
-  .kpi-section { grid-template-columns:repeat(3,1fr); }
+  .kpi-section { grid-template-columns: repeat(4, 1fr); gap:10px; }
 }
 
-@media (max-width: 576px) {
-  .kpi-section { grid-template-columns:1fr; }
+@media (max-width: 768px) {
+  .kpi-section { grid-template-columns: repeat(2, 1fr); gap:8px; }
+}
+
+@media (max-width: 480px) {
+  .kpi-section { grid-template-columns: 1fr; gap:6px; }
 }
 </style>
 {% endblock %}
@@ -578,6 +593,10 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-card" data-key="invoices-surestarie" style="border-left-color:#20c997;">
       <div class="kpi-title">Factures - Surestarie (mois)</div>
       <div class="kpi-value" data-kpi-value="invoices-surestarie">0</div>
+    </div>
+    <div class="kpi-card" data-key="invoices-magasinage" style="border-left-color:#ff6600;">
+      <div class="kpi-title">Factures - Magasinage (mois)</div>
+      <div class="kpi-value" data-kpi-value="invoices-magasinage">0</div>
     </div>
 </div>
 
@@ -1265,6 +1284,12 @@ document.addEventListener('DOMContentLoaded',function(){
           const sJson = await sResp.json();
           setKpiValue('invoices-surestarie', sJson.count || 0);
         }catch(e){ setKpiValue('invoices-surestarie', 0); }
+        // Magasinage invoices
+        try{
+          const mResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=M`);
+          const mJson = await mResp.json();
+          setKpiValue('invoices-magasinage', mJson.count || 0);
+        }catch(e){ setKpiValue('invoices-magasinage', 0); }
       }catch(e){
         // Fallback to zero on error
         setKpiValue('invoices', 0);
@@ -1379,6 +1404,9 @@ document.addEventListener('DOMContentLoaded',function(){
         } else if(key === 'invoices-surestarie'){
           url.searchParams.set('list','invoices');
           url.searchParams.set('type','S');
+        } else if(key === 'invoices-magasinage'){
+          url.searchParams.set('list','invoices');
+          url.searchParams.set('type','M');
         } else {
           url.searchParams.set('list',key);
           // if this is the invoices KPI, prefilter to Timbrage
@@ -1440,6 +1468,9 @@ document.addEventListener('DOMContentLoaded',function(){
   } else if(listParam === 'invoices-surestarie'){
     normalizedListParam = 'invoices';
     if(!normalizedTypeParam) normalizedTypeParam = 'S';
+  } else if(listParam === 'invoices-magasinage'){
+    normalizedListParam = 'invoices';
+    if(!normalizedTypeParam) normalizedTypeParam = 'M';
   }
   const listMonthParam = urlParams.get('list_month');
   const listYearParam = urlParams.get('list_year');
