@@ -30,19 +30,24 @@ def login():
         
         user = User.query.filter_by(username=username).first()
         
-        if user and user.check_password(password) and user.is_active:
-            user.last_login = datetime.utcnow()
-            db.session.commit()
-            login_user(user, remember=request.form.get('remember', False))
-            flash('Connexion réussie!', 'success')
-            
-            next_page = request.args.get('next')
-            if next_page:
-                return redirect(next_page)
-            return redirect(url_for('dashboard.index'))
+        if not username or not password:
+            flash('Veuillez fournir un nom d\'utilisateur et un mot de passe.', 'error')
         else:
-            if user and user.check_password(password) and not user.is_active:
-                flash('Utilisateur désactivé.', 'error')
+            if user:
+                if user.check_password(password):
+                    if user.is_active:
+                        user.last_login = datetime.utcnow()
+                        db.session.commit()
+                        login_user(user, remember=request.form.get('remember', False))
+                        flash('Connexion réussie!', 'success')
+                        next_page = request.args.get('next')
+                        if next_page:
+                            return redirect(next_page)
+                        return redirect(url_for('dashboard.index'))
+                    else:
+                        flash('Utilisateur désactivé.', 'error')
+                else:
+                    flash('Nom d\'utilisateur ou mot de passe incorrect.', 'error')
             else:
                 flash('Nom d\'utilisateur ou mot de passe incorrect.', 'error')
     
