@@ -1,362 +1,1115 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard Admin - E-Trans{% endblock %}
+{% block title %}Dashboard Administrateur - E-Trans{% endblock %}
 
 {% block css %}
 <style>
-    .stat-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-        border: none;
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    .stat-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-    }
-    .stat-card .card-body {
-        padding: 1.5rem;
-    }
-    .stat-icon {
-        font-size: 2.5rem;
-        opacity: 0.8;
-    }
-    .stat-number {
-        font-size: 2.5rem;
-        font-weight: bold;
-        margin: 0;
-    }
-    .stat-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-        margin: 0;
-    }
-    .chart-container {
-        position: relative;
-        height: 300px;
-        margin: 20px 0;
-    }
-    .action-card {
-        border: none;
-        border-radius: 10px;
-        transition: all 0.3s;
-        text-decoration: none;
-        display: block;
-        color: inherit;
-    }
-    .action-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
-        text-decoration: none;
-    }
-    .loading-spinner {
-        text-align: center;
-        padding: 2rem;
-    }
+:root {
+  --color-primary: #2c3e50;
+  --color-secondary: #3498db;
+  --color-success: #27ae60;
+  --color-warning: #e67e22;
+  --color-danger: #e74c3c;
+  --color-info: #3498db;
+  --color-light: #f8f9fa;
+  --color-dark: #2c3e50;
+  --color-border: #e0e0e0;
+  --border-radius: 10px;
+  --box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+  --transition: all 0.3s ease;
+}
+
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 15px;
+  box-shadow: var(--box-shadow);
+  padding: 8px 24px 0 24px;
+  height: auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.welcome-section h1 {
+  color: var(--color-primary);
+  font-size: 1.8rem;
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.welcome-message {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+/* KPI Cards - Style Admin */
+.kpi-section {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.kpi-card {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--box-shadow);
+  border-left: 5px solid var(--color-primary);
+  transition: var(--transition);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.kpi-card.active {
+  border-left-width: 8px;
+  background: linear-gradient(to right, rgba(52,152,219,0.05), transparent);
+}
+
+.kpi-title {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kpi-title i {
+  color: var(--color-secondary);
+  font-size: 1rem;
+}
+
+.kpi-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin: 8px 0;
+  color: var(--color-dark);
+  line-height: 1.2;
+}
+
+.kpi-sub {
+  font-size: 0.85rem;
+  color: #777;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.trend-up { background: rgba(39,174,96,0.1); color: #27ae60; }
+.trend-down { background: rgba(231,76,60,0.1); color: #e74c3c; }
+
+/* Actions rapides */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.action-card {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--box-shadow);
+  transition: var(--transition);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.action-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+  border-color: var(--color-secondary);
+  text-decoration: none;
+  color: inherit;
+}
+
+.action-icon {
+  font-size: 2.2rem;
+  margin-bottom: 12px;
+  color: var(--color-secondary);
+}
+
+.action-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: var(--color-dark);
+}
+
+.action-desc {
+  font-size: 0.85rem;
+  color: #777;
+  margin: 0;
+}
+
+/* Graphiques */
+.charts-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.chart-container {
+  background: white;
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--color-border);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chart-header h3 {
+  color: var(--color-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-header h3 i {
+  color: var(--color-secondary);
+}
+
+.chart-wrapper {
+  position: relative;
+  height: 250px;
+  width: 100%;
+}
+
+/* Informations système */
+.system-info {
+  background: white;
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--color-border);
+  margin: 20px 0;
+}
+
+.system-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.system-header i {
+  font-size: 1.5rem;
+  color: var(--color-info);
+}
+
+.system-header h3 {
+  color: var(--color-primary);
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.system-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.system-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-light);
+  border-radius: 8px;
+  transition: var(--transition);
+}
+
+.system-item:hover {
+  background: #e9ecef;
+}
+
+.system-item i {
+  font-size: 1.2rem;
+  color: var(--color-secondary);
+  width: 24px;
+  text-align: center;
+}
+
+.system-item-content {
+  flex: 1;
+}
+
+.system-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.system-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-dark);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-success { background: rgba(39,174,96,0.1); color: #27ae60; }
+.status-warning { background: rgba(230,126,34,0.1); color: #e67e22; }
+.status-danger { background: rgba(231,76,60,0.1); color: #e74c3c; }
+.status-info { background: rgba(52,152,219,0.1); color: #3498db; }
+
+/* Loading states */
+.loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.loading-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Responsive */
+@media (max-width: 992px) {
+  .kpi-section,
+  .quick-actions,
+  .charts-section {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .system-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 576px) {
+  .kpi-section,
+  .quick-actions,
+  .charts-section {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row mt-4 mb-4">
-    <div class="col-md-12">
-        <h2 class="mb-0">
-            <i class="fas fa-tachometer-alt"></i> Dashboard Administrateur
-        </h2>
-        <p class="text-muted">Vue d'ensemble et gestion du système</p>
-    </div>
+<div class="dashboard-header">
+  <div class="welcome-section">
+    <h1>
+      <i class="fas fa-tachometer-alt text-primary"></i> 
+      Dashboard Administrateur
+    </h1>
+    <p class="welcome-message">
+      <i class="fas fa-user-shield"></i> 
+      Bonjour <strong>{{ current_user.username }}</strong> · 
+      <span class="text-muted">
+        <i class="fas fa-calendar"></i> {{ now().strftime('%d/%m/%Y') if now else '' }}
+      </span>
+    </p>
+  </div>
+  <div class="text-muted">
+    <span class="status-badge status-success">
+      <i class="fas fa-check-circle"></i> Système opérationnel
+    </span>
+  </div>
 </div>
 
-<!-- Statistiques principales -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card stat-card bg-gradient-primary text-white">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <p class="stat-label">Total Utilisateurs</p>
-                    <h2 class="stat-number" id="total-users">
-                        <span class="spinner-border spinner-border-sm" role="status"></span>
-                    </h2>
-                </div>
-                <div class="stat-icon">
-                    <i class="fas fa-users"></i>
-                </div>
-            </div>
-        </div>
+<!-- Statistiques principales KPI -->
+<div class="kpi-section">
+  <div class="kpi-card" data-key="total-users" style="border-left-color: var(--color-info);">
+    <div class="kpi-title">
+      <i class="fas fa-users"></i> Total Utilisateurs
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card bg-gradient-success text-white">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <p class="stat-label">Utilisateurs Actifs</p>
-                    <h2 class="stat-number" id="active-users">
-                        <span class="spinner-border spinner-border-sm" role="status"></span>
-                    </h2>
-                </div>
-                <div class="stat-icon">
-                    <i class="fas fa-user-check"></i>
-                </div>
-            </div>
-        </div>
+    <div class="kpi-value" id="total-users">
+      <span class="spinner-border spinner-border-sm" role="status"></span>
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card bg-gradient-warning text-white">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <p class="stat-label">Connexions Aujourd'hui</p>
-                    <h2 class="stat-number" id="connexions-today">
-                        <span class="spinner-border spinner-border-sm" role="status"></span>
-                    </h2>
-                </div>
-                <div class="stat-icon">
-                    <i class="fas fa-sign-in-alt"></i>
-                </div>
-            </div>
-        </div>
+    <div class="kpi-sub">
+      <span class="kpi-trend trend-up">
+        <i class="fas fa-arrow-up"></i> +12%
+      </span>
+      vs mois dernier
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card bg-gradient-info text-white">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <p class="stat-label">Total Dossiers</p>
-                    <h2 class="stat-number" id="total-dossiers">
-                        <span class="spinner-border spinner-border-sm" role="status"></span>
-                    </h2>
-                </div>
-                <div class="stat-icon">
-                    <i class="fas fa-folder-open"></i>
-                </div>
-            </div>
-        </div>
+  </div>
+  
+  <div class="kpi-card" data-key="active-users" style="border-left-color: var(--color-success);">
+    <div class="kpi-title">
+      <i class="fas fa-user-check"></i> Utilisateurs Actifs
     </div>
+    <div class="kpi-value" id="active-users">
+      <span class="spinner-border spinner-border-sm" role="status"></span>
+    </div>
+    <div class="kpi-sub">
+      <span class="text-success"><i class="fas fa-circle"></i> En ligne maintenant</span>
+    </div>
+  </div>
+  
+  <div class="kpi-card" data-key="connexions-today" style="border-left-color: var(--color-warning);">
+    <div class="kpi-title">
+      <i class="fas fa-sign-in-alt"></i> Connexions Aujourd'hui
+    </div>
+    <div class="kpi-value" id="connexions-today">
+      <span class="spinner-border spinner-border-sm" role="status"></span>
+    </div>
+    <div class="kpi-sub">
+      <span class="kpi-trend trend-up">
+        <i class="fas fa-arrow-up"></i> +8%
+      </span>
+      vs hier
+    </div>
+  </div>
+  
+  <div class="kpi-card" data-key="total-dossiers" style="border-left-color: var(--color-primary);">
+    <div class="kpi-title">
+      <i class="fas fa-folder-open"></i> Total Dossiers
+    </div>
+    <div class="kpi-value" id="total-dossiers">
+      <span class="spinner-border spinner-border-sm" role="status"></span>
+    </div>
+    <div class="kpi-sub">
+      <span class="text-info"><i class="fas fa-file"></i> 156 ouverts ce mois</span>
+    </div>
+  </div>
 </div>
 
 <!-- Actions rapides -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <a href="{{ url_for('auth.manage_users') }}" class="action-card">
-            <div class="card border-primary">
-                <div class="card-body text-center">
-                    <i class="fas fa-users fa-3x text-primary mb-3"></i>
-                    <h5 class="card-title">Gérer Utilisateurs</h5>
-                    <p class="text-muted small">Créer, modifier, supprimer</p>
-                </div>
-            </div>
-        </a>
+<div class="quick-actions">
+  <a href="{{ url_for('auth.manage_users') }}" class="action-card">
+    <div class="action-icon">
+      <i class="fas fa-users-cog"></i>
     </div>
-    <div class="col-md-3">
-        <a href="#" class="action-card">
-            <div class="card border-info">
-                <div class="card-body text-center">
-                    <i class="fas fa-user-tag fa-3x text-info mb-3"></i>
-                    <h5 class="card-title">Gérer Rôles</h5>
-                    <p class="text-muted small">Permissions et accès</p>
-                </div>
-            </div>
-        </a>
+    <h4 class="action-title">Gérer Utilisateurs</h4>
+    <p class="action-desc">Créer, modifier, désactiver des comptes</p>
+    <span class="badge bg-primary mt-2">Administration</span>
+  </a>
+  
+  <a href="#" class="action-card">
+    <div class="action-icon">
+      <i class="fas fa-user-tag"></i>
     </div>
-    <div class="col-md-3">
-        <a href="#" class="action-card">
-            <div class="card border-warning">
-                <div class="card-body text-center">
-                    <i class="fas fa-clipboard-list fa-3x text-warning mb-3"></i>
-                    <h5 class="card-title">Logs Système</h5>
-                    <p class="text-muted small">Historique d'activité</p>
-                </div>
-            </div>
-        </a>
+    <h4 class="action-title">Gérer Rôles</h4>
+    <p class="action-desc">Permissions et niveaux d'accès</p>
+    <span class="badge bg-info mt-2">Sécurité</span>
+  </a>
+  
+  <a href="#" class="action-card">
+    <div class="action-icon">
+      <i class="fas fa-clipboard-list"></i>
     </div>
-    <div class="col-md-3">
-        <a href="#" class="action-card">
-            <div class="card border-secondary">
-                <div class="card-body text-center">
-                    <i class="fas fa-cog fa-3x text-secondary mb-3"></i>
-                    <h5 class="card-title">Paramètres</h5>
-                    <p class="text-muted small">Configuration système</p>
-                </div>
-            </div>
-        </a>
+    <h4 class="action-title">Logs Système</h4>
+    <p class="action-desc">Historique complet des activités</p>
+    <span class="badge bg-warning mt-2">Audit</span>
+  </a>
+  
+  <a href="#" class="action-card">
+    <div class="action-icon">
+      <i class="fas fa-cog"></i>
     </div>
+    <h4 class="action-title">Paramètres</h4>
+    <p class="action-desc">Configuration générale du système</p>
+    <span class="badge bg-secondary mt-2">Système</span>
+  </a>
 </div>
 
 <!-- Graphiques -->
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-chart-line text-primary"></i> Activité des 7 derniers jours
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="chart-container">
-                    <canvas id="activityChart"></canvas>
-                </div>
-            </div>
-        </div>
+<div class="charts-section">
+  <div class="chart-container">
+    <div class="chart-header">
+      <h3>
+        <i class="fas fa-chart-line text-primary"></i>
+        Activité des 7 derniers jours
+      </h3>
+      <span class="badge bg-light text-dark">
+        <i class="fas fa-sync"></i> Temps réel
+      </span>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-chart-pie text-success"></i> Répartition par Rôle
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="chart-container">
-                    <canvas id="rolesChart"></canvas>
-                </div>
-            </div>
-        </div>
+    <div class="chart-wrapper">
+      <canvas id="activityChart"></canvas>
     </div>
+    <div class="text-muted mt-3 small">
+      <i class="fas fa-info-circle"></i> Nombre de connexions journalières
+    </div>
+  </div>
+  
+  <div class="chart-container">
+    <div class="chart-header">
+      <h3>
+        <i class="fas fa-chart-pie text-success"></i>
+        Répartition par Rôle
+      </h3>
+      <span class="badge bg-light text-dark">
+        <i class="fas fa-users"></i> Utilisateurs
+      </span>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="rolesChart"></canvas>
+    </div>
+    <div class="mt-3" id="roles-legend" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;"></div>
+  </div>
 </div>
 
 <!-- Informations système -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle text-info"></i> Informations Système
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <ul class="list-unstyled">
-                            <li class="mb-2">
-                                <i class="fas fa-server text-primary"></i> 
-                                <strong>Base de données:</strong> SQL Server Express
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-code text-success"></i> 
-                                <strong>Framework:</strong> Flask 3.1.2
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-shield-alt text-warning"></i> 
-                                <strong>Authentication:</strong> Flask-Login + JWT
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="col-md-6">
-                        <ul class="list-unstyled">
-                            <li class="mb-2">
-                                <i class="fas fa-clock text-info"></i> 
-                                <strong>Dernière mise à jour:</strong> <span id="last-update">Chargement...</span>
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-check-circle text-success"></i> 
-                                <strong>Statut:</strong> <span class="badge bg-success">Opérationnel</span>
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-user-shield text-primary"></i> 
-                                <strong>Connecté en tant que:</strong> {{ current_user.username }}
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="system-info">
+  <div class="system-header">
+    <i class="fas fa-server"></i>
+    <h3>Informations Système</h3>
+  </div>
+  
+  <div class="system-grid">
+    <div class="system-item">
+      <i class="fas fa-database"></i>
+      <div class="system-item-content">
+        <div class="system-label">Base de données</div>
+        <div class="system-value">SQL Server Express</div>
+      </div>
+      <span class="status-badge status-success">Connecté</span>
     </div>
+    
+    <div class="system-item">
+      <i class="fas fa-code"></i>
+      <div class="system-item-content">
+        <div class="system-label">Framework</div>
+        <div class="system-value">Flask 3.1.2</div>
+      </div>
+      <span class="status-badge status-info">Stable</span>
+    </div>
+    
+    <div class="system-item">
+      <i class="fas fa-shield-alt"></i>
+      <div class="system-item-content">
+        <div class="system-label">Authentification</div>
+        <div class="system-value">Flask-Login + JWT</div>
+      </div>
+      <span class="status-badge status-success">Sécurisé</span>
+    </div>
+    
+    <div class="system-item">
+      <i class="fas fa-clock"></i>
+      <div class="system-item-content">
+        <div class="system-label">Dernière mise à jour</div>
+        <div class="system-value" id="last-update">Chargement...</div>
+      </div>
+      <span class="status-badge status-info">
+        <i class="fas fa-sync fa-spin"></i> Temps réel
+      </span>
+    </div>
+    
+    <div class="system-item">
+      <i class="fas fa-check-circle"></i>
+      <div class="system-item-content">
+        <div class="system-label">Statut global</div>
+        <div class="system-value">Opérationnel</div>
+      </div>
+      <span class="status-badge status-success">100%</span>
+    </div>
+    
+    <div class="system-item">
+      <i class="fas fa-user-shield"></i>
+      <div class="system-item-content">
+        <div class="system-label">Connecté en tant que</div>
+        <div class="system-value">{{ current_user.username }}</div>
+      </div>
+      <span class="status-badge status-primary">
+        <i class="fas fa-shield"></i> Administrateur
+      </span>
+    </div>
+  </div>
 </div>
 
+<!-- Loading overlay pour les mises à jour -->
+<div id="global-loading" style="display: none; position: fixed; bottom: 20px; right: 20px; background: white; padding: 12px 20px; border-radius: 30px; box-shadow: var(--box-shadow); border: 1px solid var(--color-border); z-index: 9999;">
+  <span class="loading-spinner">
+    <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+    Mise à jour des données...
+  </span>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // État global
     let activityChart = null;
     let rolesChart = null;
-
-    // Charger les statistiques
-    async function loadStats() {
+    let refreshInterval = null;
+    let isLoading = false;
+    
+    // Éléments DOM
+    const globalLoading = document.getElementById('global-loading');
+    const lastUpdateEl = document.getElementById('last-update');
+    
+    // Couleurs personnalisées
+    const COLORS = {
+        primary: '#3498db',
+        success: '#27ae60',
+        warning: '#e67e22',
+        danger: '#e74c3c',
+        purple: '#9b59b6',
+        teal: '#1abc9c'
+    };
+    
+    // Formateurs
+    const formatters = {
+        date: new Intl.DateTimeFormat('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }),
+        number: new Intl.NumberFormat('fr-FR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        })
+    };
+    
+    // Gestionnaire de cache
+    const cache = {
+        data: null,
+        timestamp: null,
+        ttl: 30000, // 30 secondes
+        
+        set(data) {
+            this.data = data;
+            this.timestamp = Date.now();
+        },
+        
+        get() {
+            if (!this.data || !this.timestamp) return null;
+            if (Date.now() - this.timestamp > this.ttl) return null;
+            return this.data;
+        },
+        
+        clear() {
+            this.data = null;
+            this.timestamp = null;
+        }
+    };
+    
+    // Afficher/masquer loading
+    function showLoading() {
+        if (!isLoading) {
+            isLoading = true;
+            if (globalLoading) globalLoading.style.display = 'block';
+        }
+    }
+    
+    function hideLoading() {
+        if (isLoading) {
+            isLoading = false;
+            if (globalLoading) globalLoading.style.display = 'none';
+        }
+    }
+    
+    // Mise à jour des statistiques
+    async function loadStats(forceRefresh = false) {
+        // Vérifier le cache
+        if (!forceRefresh) {
+            const cachedData = cache.get();
+            if (cachedData) {
+                updateUI(cachedData);
+                return;
+            }
+        }
+        
+        showLoading();
+        
         try {
-            const response = await fetch('/dashboard/api/stats/admin');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout 10s
+            
+            const response = await fetch('/dashboard/api/stats/admin', {
+                signal: controller.signal,
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const data = await response.json();
             
-            // Mettre à jour les statistiques
-            document.getElementById('total-users').textContent = data.total_users;
-            document.getElementById('active-users').textContent = data.active_users;
-            document.getElementById('connexions-today').textContent = data.connexions_today;
-            document.getElementById('total-dossiers').textContent = data.total_dossiers;
+            // Valider les données
+            if (!data || typeof data !== 'object') {
+                throw new Error('Format de données invalide');
+            }
             
-            // Créer le graphique d'activité
-            if (activityChart) activityChart.destroy();
-            const activityCtx = document.getElementById('activityChart').getContext('2d');
-            activityChart = new Chart(activityCtx, {
-                type: 'line',
-                data: {
-                    labels: data.activity.labels,
-                    datasets: [{
-                        label: 'Connexions',
-                        data: data.activity.data,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        tension: 0.4,
-                        fill: true
-                    }]
+            // Mettre en cache
+            cache.set(data);
+            
+            // Mettre à jour l'interface
+            updateUI(data);
+            
+        } catch (error) {
+            console.error('Erreur chargement stats:', error);
+            
+            if (error.name === 'AbortError') {
+                showToast('Délai d\'attente dépassé', 'warning');
+            } else {
+                showToast('Erreur de chargement des données', 'danger');
+            }
+            
+            // Afficher des valeurs par défaut
+            updateUIWithDefaultValues();
+            
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Mise à jour de l'interface
+    function updateUI(data) {
+        // Éléments KPI
+        const elements = {
+            'total-users': data.total_users,
+            'active-users': data.active_users,
+            'connexions-today': data.connexions_today,
+            'total-dossiers': data.total_dossiers
+        };
+        
+        for (const [id, value] of Object.entries(elements)) {
+            const el = document.getElementById(id);
+            if (el) {
+                // Animation de changement
+                if (el.textContent !== String(value)) {
+                    el.style.transition = 'background-color 0.3s';
+                    el.style.backgroundColor = 'rgba(52,152,219,0.1)';
+                    setTimeout(() => {
+                        el.style.backgroundColor = '';
+                    }, 300);
+                }
+                el.textContent = formatters.number.format(value || 0);
+            }
+        }
+        
+        // Graphique d'activité
+        if (data.activity) {
+            updateActivityChart(data.activity);
+        }
+        
+        // Graphique des rôles
+        if (data.roles) {
+            updateRolesChart(data.roles);
+        }
+        
+        // Dernière mise à jour
+        if (lastUpdateEl) {
+            const now = new Date();
+            lastUpdateEl.textContent = formatters.date.format(now);
+            lastUpdateEl.setAttribute('datetime', now.toISOString());
+        }
+    }
+    
+    // Valeurs par défaut en cas d'erreur
+    function updateUIWithDefaultValues() {
+        const defaultValues = {
+            'total-users': '0',
+            'active-users': '0',
+            'connexions-today': '0',
+            'total-dossiers': '0'
+        };
+        
+        for (const [id, value] of Object.entries(defaultValues)) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+        
+        if (lastUpdateEl) {
+            lastUpdateEl.textContent = formatters.date.format(new Date());
+        }
+    }
+    
+    // Graphique d'activité
+    function updateActivityChart(activityData) {
+        const ctx = document.getElementById('activityChart')?.getContext('2d');
+        if (!ctx) return;
+        
+        // Données par défaut si non fournies
+        const labels = activityData?.labels || ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+        const data = activityData?.data || [0, 0, 0, 0, 0, 0, 0];
+        
+        if (activityChart) {
+            activityChart.destroy();
+        }
+        
+        activityChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Connexions',
+                    data: data,
+                    borderColor: COLORS.primary,
+                    backgroundColor: 'rgba(52,152,219,0.1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: COLORS.primary,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'white',
+                        titleColor: '#2c3e50',
+                        bodyColor: '#666',
+                        borderColor: COLORS.primary,
+                        borderWidth: 1,
+                        padding: 12,
+                        callbacks: {
+                            label: (context) => {
+                                return `${context.parsed.y} connexion${context.parsed.y > 1 ? 's' : ''}`;
+                            }
+                        }
+                    }
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                        },
+                        ticks: {
+                            stepSize: 1,
+                            callback: (value) => formatters.number.format(value)
                         }
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Graphique des rôles
+    function updateRolesChart(rolesData) {
+        const ctx = document.getElementById('rolesChart')?.getContext('2d');
+        if (!ctx) return;
+        
+        // Données par défaut
+        const labels = rolesData?.labels || ['Administrateurs', 'Gestionnaires', 'Commerciaux', 'Clients', 'Visiteurs'];
+        const data = rolesData?.data || [0, 0, 0, 0, 0];
+        
+        if (rolesChart) {
+            rolesChart.destroy();
+        }
+        
+        const backgroundColors = [
+            COLORS.danger,
+            COLORS.warning,
+            COLORS.success,
+            COLORS.primary,
+            COLORS.purple,
+            COLORS.teal
+        ];
+        
+        rolesChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors.slice(0, data.length),
+                    borderWidth: 3,
+                    borderColor: 'white',
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 15,
+                            font: {
+                                size: 11
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'white',
+                        titleColor: '#2c3e50',
+                        bodyColor: '#666',
+                        borderColor: COLORS.primary,
+                        borderWidth: 1,
+                        padding: 12,
+                        callbacks: {
+                            label: (context) => {
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${context.label}: ${value} (${percentage}%)`;
                             }
                         }
                     }
                 }
-            });
-            
-            // Créer le graphique de répartition des rôles
-            if (rolesChart) rolesChart.destroy();
-            const rolesCtx = document.getElementById('rolesChart').getContext('2d');
-            rolesChart = new Chart(rolesCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: data.roles.labels,
-                    datasets: [{
-                        data: data.roles.data,
-                        backgroundColor: [
-                            'rgb(255, 99, 132)',
-                            'rgb(54, 162, 235)',
-                            'rgb(255, 205, 86)',
-                            'rgb(75, 192, 192)',
-                            'rgb(153, 102, 255)'
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right'
-                        }
-                    }
-                }
-            });
-            
-            // Mettre à jour l'heure
-            document.getElementById('last-update').textContent = new Date().toLocaleString('fr-FR');
-            
-        } catch (error) {
-            console.error('Erreur lors du chargement des statistiques:', error);
-        }
+            }
+        });
+        
+        // Mettre à jour la légende personnalisée
+        updateRolesLegend(labels, data, backgroundColors);
     }
-
-    // Charger les stats au démarrage
-    document.addEventListener('DOMContentLoaded', function() {
+    
+    // Légende personnalisée pour les rôles
+    function updateRolesLegend(labels, data, colors) {
+        const legendEl = document.getElementById('roles-legend');
+        if (!legendEl) return;
+        
+        const total = data.reduce((a, b) => a + b, 0);
+        
+        legendEl.innerHTML = labels.map((label, index) => {
+            const value = data[index];
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+            return `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: ${colors[index]};"></span>
+                    <span style="font-size: 0.85rem; color: #666;">
+                        ${label}: <strong>${formatters.number.format(value)}</strong> (${percentage}%)
+                    </span>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // Notifications toast
+    function showToast(message, type = 'info') {
+        // Créer l'élément toast
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            border-left: 4px solid ${COLORS[type] || COLORS.info};
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        `;
+        
+        // Icône selon le type
+        const icon = document.createElement('i');
+        icon.className = `fas fa-${type === 'success' ? 'check-circle' : 
+                               type === 'danger' ? 'exclamation-circle' : 
+                               type === 'warning' ? 'exclamation-triangle' : 'info-circle'}`;
+        icon.style.color = COLORS[type] || COLORS.info;
+        
+        toast.appendChild(icon);
+        toast.appendChild(document.createTextNode(message));
+        
+        document.body.appendChild(toast);
+        
+        // Animation d'entrée
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(-100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Supprimer après 5 secondes
+        setTimeout(() => {
+            toast.style.animation = 'slideIn 0.3s ease reverse';
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+    }
+    
+    // Rafraîchissement manuel
+    function refreshData() {
+        cache.clear();
+        loadStats(true);
+        showToast('Données mises à jour', 'success');
+    }
+    
+    // Gestion des KPI cards au clic
+    function initKPICards() {
+        document.querySelectorAll('.kpi-card').forEach(card => {
+            card.addEventListener('click', function() {
+                // Retirer la classe active de toutes les cartes
+                document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active'));
+                // Ajouter la classe active à la carte cliquée
+                this.classList.add('active');
+                
+                const key = this.getAttribute('data-key');
+                showToast(`Affichage des détails: ${key}`, 'info');
+                
+                // Ici vous pouvez ajouter la redirection vers la liste détaillée
+                // window.location.href = `/dashboard/admin/list?type=${key}`;
+            });
+        });
+    }
+    
+    // Initialisation
+    function init() {
+        // Charger les données
         loadStats();
         
-        // Rafraîchir toutes les 30 secondes
-        setInterval(loadStats, 30000);
-    });
+        // Initialiser les KPI cards
+        initKPICards();
+        
+        // Rafraîchissement automatique toutes les 30 secondes
+        refreshInterval = setInterval(() => loadStats(), 30000);
+        
+        // Gestionnaire de visibilité de la page
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                clearInterval(refreshInterval);
+            } else {
+                loadStats(true);
+                refreshInterval = setInterval(() => loadStats(), 30000);
+            }
+        });
+        
+        // Gestionnaire de rafraîchissement manuel (Ctrl+R ou Cmd+R)
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+                e.preventDefault();
+                refreshData();
+            }
+        });
+        
+        // Nettoyage à la décharge
+        window.addEventListener('beforeunload', () => {
+            clearInterval(refreshInterval);
+        });
+        
+        // Gestionnaire pour le bouton de rafraîchissement (si présent)
+        const refreshBtn = document.getElementById('refresh-data');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', refreshData);
+        }
+    }
+    
+    // Démarrer
+    init();
+});
+
+// Gestionnaire d'erreur global pour les promesses non gérées
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('Erreur non gérée:', event.reason);
+    // Empêcher l'affichage dans la console des erreurs de fetch normales
+    if (event.reason?.name === 'AbortError') {
+        event.preventDefault();
+    }
+});
+
+// Support pour la fonction now() dans le template
+{% if not now %}
+function now() {
+    return new Date();
+}
+{% endif %}
 </script>
 {% endblock %}
