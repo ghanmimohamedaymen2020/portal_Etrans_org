@@ -95,7 +95,7 @@ body.list-only main {
 
 .kpi-section {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 8px;
   margin: 8px 0 8px;
 }
@@ -534,7 +534,7 @@ body.chart-only.show-chart-list .list-section {
 
 @media (max-width: 992px) {
   .charts-section { grid-template-columns:1fr; }
-  .kpi-section { grid-template-columns:repeat(2,1fr); }
+  .kpi-section { grid-template-columns:repeat(3,1fr); }
 }
 
 @media (max-width: 576px) {
@@ -568,9 +568,17 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-sub">En attente</div>
   </div>
   <div class="kpi-card" data-key="invoices" style="border-left-color:var(--color-success);">
-    <div class="kpi-title">Avis avec Factures (mois)</div>
+    <div class="kpi-title">Timbrage (mois)</div>
     <div class="kpi-value" data-kpi-value="invoices">0</div>
   </div>
+    <div class="kpi-card" data-key="invoices-agent" style="border-left-color:#6f42c1;">
+      <div class="kpi-title">Factures - Agent (mois)</div>
+      <div class="kpi-value" data-kpi-value="invoices-agent">0</div>
+    </div>
+    <div class="kpi-card" data-key="invoices-surestarie" style="border-left-color:#20c997;">
+      <div class="kpi-title">Factures - Surestarie (mois)</div>
+      <div class="kpi-value" data-kpi-value="invoices-surestarie">0</div>
+    </div>
 </div>
 
 <div class="charts-section">
@@ -1114,7 +1122,11 @@ document.addEventListener('DOMContentLoaded',function(){
                 if(monthFilter===null) monthFilter=now.getMonth()+1;
                 if(yearFilter===null) yearFilter=now.getFullYear();
               }
-              const resp = await fetch(`/api/factures/ff-list?month=${monthFilter}&year=${yearFilter}`);
+              let fetchUrl = `/api/factures/ff-list?month=${monthFilter}&year=${yearFilter}`;
+              if(opts && opts.type){
+                fetchUrl += `&type=${encodeURIComponent(opts.type)}`;
+              }
+              const resp = await fetch(fetchUrl);
               const data = await resp.json();
               if(!resp.ok) throw new Error(data.error||'Erreur API');
               items = data.factures || [];
@@ -1122,7 +1134,9 @@ document.addEventListener('DOMContentLoaded',function(){
               if(exportCsvBtn){
                 exportCsvBtn.style.display='inline-block';
                 exportCsvBtn.onclick = function(){
-                  window.location = `/api/factures/ff-list/export?month=${monthFilter}&year=${yearFilter}`;
+                  let url = `/api/factures/ff-list/export?month=${monthFilter}&year=${yearFilter}`;
+                  if(opts && opts.type) url += `&type=${encodeURIComponent(opts.type)}`;
+                  window.location = url;
                 };
               }
             } else {
@@ -1236,9 +1250,21 @@ document.addEventListener('DOMContentLoaded',function(){
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
-        const monthResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}`);
+        const monthResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=T`);
         const monthJson = await monthResp.json();
         setKpiValue('invoices', monthJson.count || 0);
+        // Agent invoices
+        try{
+          const agentResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=A`);
+          const agentJson = await agentResp.json();
+          setKpiValue('invoices-agent', agentJson.count || 0);
+        }catch(e){ setKpiValue('invoices-agent', 0); }
+        // Surestarie invoices
+        try{
+          const sResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=S`);
+          const sJson = await sResp.json();
+          setKpiValue('invoices-surestarie', sJson.count || 0);
+        }catch(e){ setKpiValue('invoices-surestarie', 0); }
       }catch(e){
         // Fallback to zero on error
         setKpiValue('invoices', 0);
@@ -1346,7 +1372,20 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       if(key){
         const url=new URL(window.location.href);
-        url.searchParams.set('list',key);
+        // Make the new invoice-type KPIs behave like the original 'invoices' card
+        if(key === 'invoices-agent'){
+          url.searchParams.set('list','invoices');
+          url.searchParams.set('type','A');
+        } else if(key === 'invoices-surestarie'){
+          url.searchParams.set('list','invoices');
+          url.searchParams.set('type','S');
+        } else {
+          url.searchParams.set('list',key);
+          // if this is the invoices KPI, prefilter to Timbrage
+          if(key==='invoices'){
+            url.searchParams.set('type','T');
+          }
+        }
         url.searchParams.set('listOnly','1');
         window.open(url.toString(),'_blank');
       }
@@ -1389,23 +1428,37 @@ document.addEventListener('DOMContentLoaded',function(){
   const chartParam=urlParams.get('chart');
   const deviseParam=urlParams.get('devise');
   const commercialParam=urlParams.get('commercial');
+  const typeParam=urlParams.get('type');
+  // Normalize legacy/variant list param values so new KPI keys reuse the
+  // invoices list behavior. If URL contains 'invoices-agent' or
+  // 'invoices-surestarie', treat it as 'invoices' and set the matching type.
+  let normalizedListParam = listParam;
+  let normalizedTypeParam = typeParam;
+  if(listParam === 'invoices-agent'){
+    normalizedListParam = 'invoices';
+    if(!normalizedTypeParam) normalizedTypeParam = 'A';
+  } else if(listParam === 'invoices-surestarie'){
+    normalizedListParam = 'invoices';
+    if(!normalizedTypeParam) normalizedTypeParam = 'S';
+  }
   const listMonthParam = urlParams.get('list_month');
   const listYearParam = urlParams.get('list_year');
   if(listOnlyParam){
     document.body.classList.add('list-only');
   }
-  if(listOnlyParam&&listParam){
+  if(listOnlyParam&&normalizedListParam){
     const activeCard=document.querySelector(`.kpi-card[data-key="${listParam}"]`);
     if(activeCard) activeCard.classList.add('active');
     const opts={};
     if(listMonthParam) opts.month=Number(listMonthParam);
     if(listYearParam) opts.year=Number(listYearParam);
-    if(listParam==='generated'&&commercialParam){
+    if(normalizedTypeParam) opts.type = normalizedTypeParam;
+    if(normalizedListParam==='generated'&&commercialParam){
       showFreightByCommercial(commercialParam);
-    }else if(listParam==='generated'&&deviseParam){
+    }else if(normalizedListParam==='generated'&&deviseParam){
       showFreightByDevise(deviseParam);
     }else{
-      renderList(listParam, opts);
+      renderList(normalizedListParam, opts);
     }
   }else if(chartParam==='devise'){
     document.body.classList.add('chart-only');

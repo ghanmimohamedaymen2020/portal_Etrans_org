@@ -164,12 +164,91 @@ def get_factures_aa_detail():
         column_set = {c for c in columns}
 
         selected_columns = [c for c in desired_columns if c in column_set]
+        # If the AA view is not available or doesn't contain expected columns,
+        # fall back to returning rows from View_FF_Entete + View_FF_Total so the
+        # frontend lists (not-stamped / invoices) can still show data based on FF.
         if not selected_columns:
-            return jsonify({
-                'factures': [],
-                'total': 0,
-                'error': "Aucune colonne attendue trouvée dans View_AA_AvecFacture"
-            }), 500
+            # Inspect FF entete / total columns
+            ff_entete_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_FF_Entete'
+            """)).scalars().all()
+            ff_total_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_FF_Total'
+            """)).scalars().all()
+            ff_set = {c for c in ff_entete_cols}
+            total_set = {c for c in ff_total_cols}
+
+            ff_select = [
+                'e.FF_H_NumFact AS AA_H_Reference',
+                'e.FF_H_DateProcess AS AA_H_DateProcess',
+                'e.FF_H_Dossier AS AA_H_Dossier'
+            ]
+            if 'FF_H_NomClient' in ff_set:
+                ff_select.append('e.FF_H_NomClient AS AA_H_NomClient')
+            else:
+                ff_select.append("NULL AS AA_H_NomClient")
+            if 'FF_H_ETA' in ff_set:
+                ff_select.append('e.FF_H_ETA AS AA_H_ETA')
+            else:
+                ff_select.append("NULL AS AA_H_ETA")
+            if 'FF_H_House' in ff_set:
+                ff_select.append('e.FF_H_House AS AA_H_House')
+            else:
+                ff_select.append("NULL AS AA_H_House")
+            if 'FF_H_Service' in ff_set:
+                ff_select.append('e.FF_H_Service AS AA_H_Service')
+            else:
+                ff_select.append("NULL AS AA_H_Service")
+            if 'FF_H_IdCommercial' in ff_set:
+                ff_select.append('e.FF_H_IdCommercial AS AA_H_IdCommercial')
+            elif 'FF_H_NomCommercial' in ff_set:
+                ff_select.append('e.FF_H_NomCommercial AS AA_H_NomCommercial')
+            else:
+                ff_select.append("NULL AS AA_H_IdCommercial")
+
+            # include ff totals when available
+            if 'FF_T_TotalTTC' in total_set:
+                ff_select.append('t.FF_T_TotalTTC AS total_ttc')
+            else:
+                ff_select.append("NULL AS total_ttc")
+            if 'FF_T_TotalNonSoumis' in total_set:
+                ff_select.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+            else:
+                ff_select.append("NULL AS ff_total_non_soumis")
+            if 'FF_T_TotalSoumis' in total_set:
+                ff_select.append('t.FF_T_TotalSoumis AS ff_total_soumis')
+            else:
+                ff_select.append("NULL AS ff_total_soumis")
+            if 'FF_T_TotalTVA' in total_set:
+                ff_select.append('t.FF_T_TotalTVA AS ff_total_tva')
+            else:
+                ff_select.append("NULL AS ff_total_tva")
+
+            fallback_sql = text(f"SELECT {', '.join(ff_select)} FROM [dbo].[View_FF_Entete] e LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact ORDER BY e.FF_H_DateProcess DESC")
+            rows = db.session.execute(fallback_sql).mappings().all()
+            factures = []
+            for row in rows:
+                factures.append({
+                    'AA_H_Reference': row.get('AA_H_Reference'),
+                    'AA_H_DateProcess': row.get('AA_H_DateProcess'),
+                    'AA_H_Dossier': row.get('AA_H_Dossier'),
+                    'AA_H_NomClient': row.get('AA_H_NomClient'),
+                    'AA_H_ETA': row.get('AA_H_ETA'),
+                    'AA_H_House': row.get('AA_H_House'),
+                    'AA_H_Service': row.get('AA_H_Service'),
+                    'AA_H_IdCommercial': row.get('AA_H_IdCommercial') or row.get('AA_H_NomCommercial'),
+                    'total_ttc': row.get('total_ttc'),
+                    'ff_total_non_soumis': row.get('ff_total_non_soumis'),
+                    'ff_total_soumis': row.get('ff_total_soumis'),
+                    'ff_total_tva': row.get('ff_total_tva')
+                })
+            return jsonify({'factures': factures, 'total': len(factures)})
 
         order_by = 'AA_H_DateProcess' if 'AA_H_DateProcess' in column_set else selected_columns[0]
 
@@ -632,19 +711,75 @@ def get_ff_list():
             select_parts.append('t.FF_T_TotalTTC AS total_ttc')
         else:
             select_parts.append("NULL AS total_ttc")
-
-        sql = text(f"""
-            SELECT {', '.join(select_parts)}
-            FROM [dbo].[View_FF_Entete] e
-            LEFT JOIN [dbo].[View_FF_Total] t
-              ON t.FF_T_NumFact = e.FF_H_NumFact
-            WHERE MONTH(e.FF_H_DateProcess) = :month
-              AND YEAR(e.FF_H_DateProcess) = :year
-            ORDER BY e.FF_H_DateProcess DESC
-        """)
-
-        rows = db.session.execute(sql, {'month': month, 'year': year}).mappings().all()
-        factures = [dict(row) for row in rows]
+        # If a specific invoice type is requested, prefer the totals view
+        # joined to the entete view and filter by FF_H_TypeFacture (matches
+        # the SQL you provided for Timbrage/Agent/Magasinage).
+        req_type = request.args.get('type')
+        params = {'month': month, 'year': year}
+        if req_type:
+            # Build t_select using only columns that exist to avoid SQL errors
+            t_select = [
+                't.FF_T_NumFact AS reference',
+                'e.FF_H_DateProcess AS date_process',
+                't.FF_T_Dossier AS dossier',
+                "COALESCE(e.FF_H_NomClient, NULL) AS nom_client",
+                "COALESCE(e.FF_H_ETA, NULL) AS eta",
+                't.FF_T_House AS house',
+                "COALESCE(e.FF_H_Service, NULL) AS service",
+            ]
+            # commercial column: prefer NomCommercial, else IdCommercial, else NULL
+            if 'FF_H_NomCommercial' in entete_set:
+                t_select.append('e.FF_H_NomCommercial AS nom_commercial')
+            elif 'FF_H_IdCommercial' in entete_set:
+                t_select.append('e.FF_H_IdCommercial AS nom_commercial')
+            else:
+                t_select.append("NULL AS nom_commercial")
+            # totals from View_FF_Total when available
+            if 'FF_T_TotalNonSoumis' in total_set:
+                t_select.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+            else:
+                t_select.append("NULL AS ff_total_non_soumis")
+            if 'FF_T_TotalSoumis' in total_set:
+                t_select.append('t.FF_T_TotalSoumis AS ff_total_soumis')
+            else:
+                t_select.append("NULL AS ff_total_soumis")
+            if 'FF_T_TotalTVA' in total_set:
+                t_select.append('t.FF_T_TotalTVA AS ff_total_tva')
+            else:
+                t_select.append("NULL AS ff_total_tva")
+            if 'FF_T_TotalTTC' in total_set:
+                t_select.append('t.FF_T_TotalTTC AS total_ttc')
+            else:
+                t_select.append("NULL AS total_ttc")
+            sql = text(f"SELECT {', '.join(t_select)} FROM [dbo].[View_FF_Total] t INNER JOIN [dbo].[View_FF_Entete] e ON t.FF_T_NumFact = e.FF_H_NumFact WHERE UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = :type AND MONTH(e.FF_H_DateProcess) = :month AND YEAR(e.FF_H_DateProcess) = :year ORDER BY e.FF_H_DateProcess DESC")
+            params['type'] = str(req_type).upper()
+            rows = db.session.execute(sql, params).mappings().all()
+            factures = [
+                {
+                    'reference': row.get('reference'),
+                    'date_process': row.get('date_process'),
+                    'dossier': row.get('dossier'),
+                    'nom_client': row.get('nom_client'),
+                    'eta': row.get('eta'),
+                    'house': row.get('house'),
+                    'service': row.get('service'),
+                    'nom_commercial': row.get('nom_commercial'),
+                    'ff_total_non_soumis': row.get('ff_total_non_soumis'),
+                    'ff_total_soumis': row.get('ff_total_soumis'),
+                    'ff_total_tva': row.get('ff_total_tva'),
+                    'total_ttc': row.get('total_ttc')
+                }
+                for row in rows
+            ]
+        else:
+            # default behavior: return entete-based rows (existing behavior)
+            type_filter_sql = ''
+            if request.args.get('type'):
+                type_filter_sql = " AND UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) = :type"
+            sql_text = f"SELECT {', '.join(select_parts)} FROM [dbo].[View_FF_Entete] e LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact WHERE MONTH(e.FF_H_DateProcess) = :month AND YEAR(e.FF_H_DateProcess) = :year {type_filter_sql} ORDER BY e.FF_H_DateProcess DESC"
+            sql = text(sql_text)
+            rows = db.session.execute(sql, params).mappings().all()
+            factures = [dict(row) for row in rows]
         return jsonify({'factures': factures, 'total': len(factures)})
     except Exception as exc:
         return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500
@@ -725,10 +860,10 @@ def export_ff_list_csv():
             FROM [dbo].[View_FF_Entete] e
             LEFT JOIN [dbo].[View_FF_Total] t
               ON t.FF_T_NumFact = e.FF_H_NumFact
-            WHERE MONTH(e.FF_H_DateProcess) = :month
-              AND YEAR(e.FF_H_DateProcess) = :year
-            ORDER BY e.FF_H_DateProcess DESC
-        """)
+                        WHERE MONTH(e.FF_H_DateProcess) = :month
+                            AND YEAR(e.FF_H_DateProcess) = :year
+                        ORDER BY e.FF_H_DateProcess DESC
+                """)
 
         rows = db.session.execute(sql, {'month': month, 'year': year}).mappings().all()
 
@@ -789,6 +924,26 @@ def get_factures_count():
         if year:
             where_clauses.append(f"YEAR({date_expr}) = :year")
             params['year'] = year
+
+        # optional type filter: prefer FF_H_TypeFacture, fallback to FF_H_TypeFactRect
+        invoice_type = request.args.get('type')
+        if invoice_type:
+            # inspect columns to choose the correct column name
+            entete_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_FF_Entete'
+            """)).scalars().all()
+            entete_set = {c for c in entete_cols}
+            if 'FF_H_TypeFacture' in entete_set:
+                where_clauses.append("UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = :type")
+            elif 'FF_H_TypeFactRect' in entete_set:
+                where_clauses.append("UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) = :type")
+            else:
+                # if neither column exists, do not add a type filter
+                pass
+            params['type'] = str(invoice_type).upper()
 
         where_sql = ('WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
         sql = text(f"""
