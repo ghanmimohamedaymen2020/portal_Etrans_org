@@ -545,7 +545,18 @@ body.chart-only.show-chart-list .list-section {
   <div class="chart-container">
     <div class="chart-header">
       <h2>Chiffre d'affaires mensuel (histogramme)</h2>
-      <span class="text-muted">Cliquez une barre pour voir les factures</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <label for="ca-mode-select" class="text-muted" style="font-size:0.9rem;margin-right:6px;">Vue :</label>
+        <select id="ca-mode-select" class="list-page-size">
+          <option value="total" selected>Total</option>
+          <option value="timbrage">Timbrage</option>
+          <option value="magasinage">Magasinage</option>
+          <option value="agent">Agent</option>
+          <option value="surestarie">Surestarie</option>
+          <option value="detail">Détail (empilé)</option>
+        </select>
+        <span class="text-muted">Cliquez une barre pour voir les factures</span>
+      </div>
     </div>
     <div class="chart-wrapper">
       <canvas id="barChart"></canvas>
@@ -1232,6 +1243,35 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   });
 
+  // Apply chart mode: 'total' | 'timbrage' | 'magasinage' | 'agent' | 'surestarie' | 'detail'
+  function applyCAMode(mode){
+    const sel = mode || (document.getElementById('ca-mode-select') && document.getElementById('ca-mode-select').value) || 'total';
+    let newDatasets = [];
+    if(sel === 'detail'){
+      // stacked view with activities
+      barChart.options.scales.x.stacked = true;
+      barChart.options.scales.y.stacked = true;
+      newDatasets = [
+        Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.timbrage),
+        Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.magasinage),
+        Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.agent),
+        Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.surestarie)
+      ];
+    }else{
+      barChart.options.scales.x.stacked = false;
+      barChart.options.scales.y.stacked = false;
+      const entry = datasets[sel] || datasets.total;
+      newDatasets = [Object.assign({type:'bar', borderWidth:1}, entry)];
+    }
+    barChart.data.datasets = newDatasets;
+    barChart.update();
+  }
+
+  const caSelectElem = document.getElementById('ca-mode-select');
+  if(caSelectElem){
+    caSelectElem.addEventListener('change', function(){ applyCAMode(this.value); });
+  }
+
   const urlParams=new URLSearchParams(window.location.search);
   const listParam=urlParams.get('list');
   const listOnlyParam=urlParams.get('listOnly');
@@ -1344,26 +1384,22 @@ document.addEventListener('DOMContentLoaded',function(){
   const barCtx=document.getElementById('barChart').getContext('2d');
   const barLabels=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
   const barData=new Array(12).fill(0);
-  const barDataPrev=new Array(12).fill(0);
+  // datasets: total + activities
+  const datasets = {
+    total: { label: 'Total (TND)', data: [...barData], backgroundColor: 'rgba(52,152,219,0.6)', borderColor: '#3498db' },
+    timbrage: { label: 'Timbrage', data: [...barData], backgroundColor: '#3498db' },
+    magasinage: { label: 'Magasinage', data: [...barData], backgroundColor: '#2ecc71' },
+    agent: { label: 'Agent', data: [...barData], backgroundColor: '#f39c12' },
+    surestarie: { label: 'Surestarie', data: [...barData], backgroundColor: '#e74c3c' }
+  };
+
   const barChart=new Chart(barCtx,{
     type:'bar',
     data:{
       labels:barLabels,
       datasets:[
-        {
-          label:'Année en cours (k TND)',
-          data:barData,
-          backgroundColor:'rgba(52,152,219,0.6)',
-          borderColor:'#3498db',
-          borderWidth:1
-        },
-        {
-          label:'Année précédente (k TND)',
-          data:barDataPrev,
-          backgroundColor:'rgba(149,165,166,0.5)',
-          borderColor:'#95a5a6',
-          borderWidth:1
-        }
+        // default show total
+        Object.assign({type:'bar', borderWidth:1}, datasets.total)
       ]
     },
     options:{
@@ -1373,11 +1409,9 @@ document.addEventListener('DOMContentLoaded',function(){
         if(!elements.length) return;
         const el=elements[0];
         const monthIndex=el.index; // 0-based index into labels
-        const datasetIndex=el.datasetIndex; // 0=current year,1=previous year
-        const now=new Date();
-        let year = now.getFullYear();
-        if(datasetIndex===1) year = year - 1;
         const month = monthIndex + 1; // 1-based month
+        const now=new Date();
+        const year = now.getFullYear(); // only current year
         const url=new URL(window.location.href);
         url.searchParams.set('list','invoices');
         url.searchParams.set('listOnly','1');
@@ -1390,16 +1424,18 @@ document.addEventListener('DOMContentLoaded',function(){
       scales:{
         y:{
           beginAtZero:true,
-          grid:{color:'rgba(0,0,0,0.05)'}
+          grid:{color:'rgba(0,0,0,0.05)'},
+          stacked:false
         },
-        x:{grid:{color:'rgba(0,0,0,0.05)'}}
+        x:{grid:{color:'rgba(0,0,0,0.05)'}, stacked:false}
       },
       plugins:{
         legend:{display:true},
         tooltip:{
           callbacks:{
             label:function(context){
-              return `${context.parsed.y} k TND`;
+              const val = (context.parsed && (context.parsed.y !== undefined ? context.parsed.y : context.parsed)) || 0;
+              try{ return `${Number(val).toLocaleString('fr-FR')} TND`; }catch(e){ return `${val} TND`; }
             }
           }
         }
@@ -1414,11 +1450,22 @@ document.addEventListener('DOMContentLoaded',function(){
       if(!response.ok){
         throw new Error(data.error||'Erreur API');
       }
-      const current=Array.isArray(data.current)?data.current:[];
-      const previous=Array.isArray(data.previous)?data.previous:[];
-      barChart.data.datasets[0].data=current.length===12?current:barData;
-      barChart.data.datasets[1].data=previous.length===12?previous:barDataPrev;
-      barChart.update();
+      // use activities if present (detailed series)
+      const activities = data.activities && data.activities.current ? data.activities.current : null;
+      const totals = Array.isArray(data.current) ? data.current : null;
+
+      if(activities){
+        datasets.timbrage.data = activities.timbrage.slice();
+        datasets.magasinage.data = activities.magasinage.slice();
+        datasets.agent.data = activities.agent.slice();
+        datasets.surestarie.data = activities.surestarie.slice();
+      }
+      if(totals && totals.length===12){
+        datasets.total.data = totals.slice();
+      }
+
+      // apply currently selected mode
+      applyCAMode(document.getElementById('ca-mode-select').value);
     }catch(err){
       console.error('Erreur chargement CA mensuel:',err);
     }
