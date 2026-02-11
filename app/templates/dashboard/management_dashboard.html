@@ -1764,9 +1764,20 @@ document.addEventListener('DOMContentLoaded',function(){
   /* Generic client-side table sorter: attaches to tables with class `list-table` or `sortable` */
   function tryParseNumber(v){
     if(v===null||v===undefined) return null;
-    const s=String(v).replace(/[^0-9,\-\.\s]/g,'').replace(/\s+/g,'');
+    let s = String(v);
+    // normalize various unicode spaces (NBSP, narrow NBSP, thin space, etc.) to empty
+    s = s.replace(/[\u00A0\u202F\u2009\u2007\u2008]/g, '');
+    // remove any characters except digits, comma, dot, minus
+    s = s.replace(/[^0-9,\.\-]/g,'');
     if(s.length===0) return null;
-    const n=Number(s.replace(/,/g,''));
+    // If both comma and dot are present, assume comma is thousand separator -> remove commas
+    if(s.indexOf(',')!==-1 && s.indexOf('.')!==-1){
+      s = s.replace(/,/g,'');
+    } else {
+      // otherwise, treat comma as decimal separator
+      s = s.replace(/,/g,'.');
+    }
+    const n = parseFloat(s);
     return Number.isFinite(n)?n:null;
   }
 
@@ -1779,6 +1790,38 @@ document.addEventListener('DOMContentLoaded',function(){
       const bCell=b.children[colIndex];
       const aText=(aCell? aCell.textContent.trim() : '');
       const bText=(bCell? bCell.textContent.trim() : '');
+      // Detect date patterns like dd/mm/yyyy or dd-mm-yyyy or yyyy-mm-dd
+      const dateRegex1 = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/; // dd/mm/yyyy
+      const dateRegex2 = /^(\d{4})[\-](\d{1,2})[\-](\d{1,2})$/; // yyyy-mm-dd
+      const aDateMatch1 = aText.match(dateRegex1);
+      const bDateMatch1 = bText.match(dateRegex1);
+      const aDateMatch2 = aText.match(dateRegex2);
+      const bDateMatch2 = bText.match(dateRegex2);
+      if((aDateMatch1 && bDateMatch1) || (aDateMatch2 && bDateMatch2)){
+        function toDate(text, m1, m2){
+          const d1 = text.match(dateRegex1);
+          if(d1){
+            const day = Number(d1[1]);
+            const month = Number(d1[2]) - 1;
+            let year = Number(d1[3]);
+            if(year<100) year += 2000;
+            return new Date(year, month, day);
+          }
+          const d2 = text.match(dateRegex2);
+          if(d2){
+            const year = Number(d2[1]);
+            const month = Number(d2[2]) - 1;
+            const day = Number(d2[3]);
+            return new Date(year, month, day);
+          }
+          return null;
+        }
+        const aDt = toDate(aText);
+        const bDt = toDate(bText);
+        if(aDt && bDt){
+          return asc? (aDt - bDt) : (bDt - aDt);
+        }
+      }
       const aNum=tryParseNumber(aText);
       const bNum=tryParseNumber(bText);
       if(aNum!==null && bNum!==null){
