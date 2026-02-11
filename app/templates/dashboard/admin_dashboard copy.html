@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Admin - E-Trans{% endblock %}
+
+{% block css %}
+<style>
+    .stat-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: none;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    }
+    .stat-card .card-body {
+        padding: 1.5rem;
+    }
+    .stat-icon {
+        font-size: 2.5rem;
+        opacity: 0.8;
+    }
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0;
+    }
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        margin: 0;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin: 20px 0;
+    }
+    .action-card {
+        border: none;
+        border-radius: 10px;
+        transition: all 0.3s;
+        text-decoration: none;
+        display: block;
+        color: inherit;
+    }
+    .action-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        text-decoration: none;
+    }
+    .loading-spinner {
+        text-align: center;
+        padding: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mt-4 mb-4">
+    <div class="col-md-12">
+        <h2 class="mb-0">
+            <i class="fas fa-tachometer-alt"></i> Dashboard Administrateur
+        </h2>
+        <p class="text-muted">Vue d'ensemble et gestion du système</p>
+    </div>
+</div>
+
+<!-- Statistiques principales -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card bg-gradient-primary text-white">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <p class="stat-label">Total Utilisateurs</p>
+                    <h2 class="stat-number" id="total-users">
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    </h2>
+                </div>
+                <div class="stat-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-gradient-success text-white">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <p class="stat-label">Utilisateurs Actifs</p>
+                    <h2 class="stat-number" id="active-users">
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    </h2>
+                </div>
+                <div class="stat-icon">
+                    <i class="fas fa-user-check"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-gradient-warning text-white">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <p class="stat-label">Connexions Aujourd'hui</p>
+                    <h2 class="stat-number" id="connexions-today">
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    </h2>
+                </div>
+                <div class="stat-icon">
+                    <i class="fas fa-sign-in-alt"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-gradient-info text-white">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <p class="stat-label">Total Dossiers</p>
+                    <h2 class="stat-number" id="total-dossiers">
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    </h2>
+                </div>
+                <div class="stat-icon">
+                    <i class="fas fa-folder-open"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions rapides -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <a href="{{ url_for('auth.manage_users') }}" class="action-card">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Gérer Utilisateurs</h5>
+                    <p class="text-muted small">Créer, modifier, supprimer</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="#" class="action-card">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <i class="fas fa-user-tag fa-3x text-info mb-3"></i>
+                    <h5 class="card-title">Gérer Rôles</h5>
+                    <p class="text-muted small">Permissions et accès</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="#" class="action-card">
+            <div class="card border-warning">
+                <div class="card-body text-center">
+                    <i class="fas fa-clipboard-list fa-3x text-warning mb-3"></i>
+                    <h5 class="card-title">Logs Système</h5>
+                    <p class="text-muted small">Historique d'activité</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="#" class="action-card">
+            <div class="card border-secondary">
+                <div class="card-body text-center">
+                    <i class="fas fa-cog fa-3x text-secondary mb-3"></i>
+                    <h5 class="card-title">Paramètres</h5>
+                    <p class="text-muted small">Configuration système</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Graphiques -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line text-primary"></i> Activité des 7 derniers jours
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="activityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-pie text-success"></i> Répartition par Rôle
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="rolesChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Informations système -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle text-info"></i> Informations Système
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <i class="fas fa-server text-primary"></i> 
+                                <strong>Base de données:</strong> SQL Server Express
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-code text-success"></i> 
+                                <strong>Framework:</strong> Flask 3.1.2
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-shield-alt text-warning"></i> 
+                                <strong>Authentication:</strong> Flask-Login + JWT
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <i class="fas fa-clock text-info"></i> 
+                                <strong>Dernière mise à jour:</strong> <span id="last-update">Chargement...</span>
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success"></i> 
+                                <strong>Statut:</strong> <span class="badge bg-success">Opérationnel</span>
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-user-shield text-primary"></i> 
+                                <strong>Connecté en tant que:</strong> {{ current_user.username }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let activityChart = null;
+    let rolesChart = null;
+
+    // Charger les statistiques
+    async function loadStats() {
+        try {
+            const response = await fetch('/dashboard/api/stats/admin');
+            const data = await response.json();
+            
+            // Mettre à jour les statistiques
+            document.getElementById('total-users').textContent = data.total_users;
+            document.getElementById('active-users').textContent = data.active_users;
+            document.getElementById('connexions-today').textContent = data.connexions_today;
+            document.getElementById('total-dossiers').textContent = data.total_dossiers;
+            
+            // Créer le graphique d'activité
+            if (activityChart) activityChart.destroy();
+            const activityCtx = document.getElementById('activityChart').getContext('2d');
+            activityChart = new Chart(activityCtx, {
+                type: 'line',
+                data: {
+                    labels: data.activity.labels,
+                    datasets: [{
+                        label: 'Connexions',
+                        data: data.activity.data,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Créer le graphique de répartition des rôles
+            if (rolesChart) rolesChart.destroy();
+            const rolesCtx = document.getElementById('rolesChart').getContext('2d');
+            rolesChart = new Chart(rolesCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.roles.labels,
+                    datasets: [{
+                        data: data.roles.data,
+                        backgroundColor: [
+                            'rgb(255, 99, 132)',
+                            'rgb(54, 162, 235)',
+                            'rgb(255, 205, 86)',
+                            'rgb(75, 192, 192)',
+                            'rgb(153, 102, 255)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+            
+            // Mettre à jour l'heure
+            document.getElementById('last-update').textContent = new Date().toLocaleString('fr-FR');
+            
+        } catch (error) {
+            console.error('Erreur lors du chargement des statistiques:', error);
+        }
+    }
+
+    // Charger les stats au démarrage
+    document.addEventListener('DOMContentLoaded', function() {
+        loadStats();
+        
+        // Rafraîchir toutes les 30 secondes
+        setInterval(loadStats, 30000);
+    });
+</script>
+{% endblock %}

@@ -727,6 +727,7 @@ body.chart-only.show-chart-list .list-section {
         <button type="button" class="column-toggle-btn" id="column-toggle-btn">Colonnes</button>
         <div class="column-menu" id="column-menu"></div>
       </div>
+      <button id="export-csv-btn" class="list-page-btn" style="display:none;margin-left:8px;">Exporter CSV</button>
       <span class="list-loading" id="list-loading">
         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
         Chargement...
@@ -761,6 +762,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const listPageNext=document.getElementById('list-page-next');
   const listPageInfo=document.getElementById('list-page-info');
   const listLoading=document.getElementById('list-loading');
+  const exportCsvBtn=document.getElementById('export-csv-btn');
   const listBack=document.getElementById('list-back');
   const columnToggleBtn=document.getElementById('column-toggle-btn');
   const columnMenu=document.getElementById('column-menu');
@@ -1116,6 +1118,13 @@ document.addEventListener('DOMContentLoaded',function(){
               const data = await resp.json();
               if(!resp.ok) throw new Error(data.error||'Erreur API');
               items = data.factures || [];
+              // show export button for invoices and bind download
+              if(exportCsvBtn){
+                exportCsvBtn.style.display='inline-block';
+                exportCsvBtn.onclick = function(){
+                  window.location = `/api/factures/ff-list/export?month=${monthFilter}&year=${yearFilter}`;
+                };
+              }
             } else {
               items=await fetchInvoices();
             }
@@ -1201,6 +1210,8 @@ document.addEventListener('DOMContentLoaded',function(){
     }else{
       currentItems=items;
     }
+    // hide export button for non-invoice lists
+    if(exportCsvBtn && key!=='invoices') exportCsvBtn.style.display='none';
     if(!items.length){
       listTableBody.innerHTML=`
         <tr>
