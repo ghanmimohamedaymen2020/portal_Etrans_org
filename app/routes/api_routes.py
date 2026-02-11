@@ -221,6 +221,12 @@ def get_factures_aa_detail():
 @login_required
 def get_ff_activity_totals():
     """Sommes par activité depuis View_FF_Entete et View_FF_Total."""
+    year = request.args.get('year', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    required_aa = {'AA_H_NumFacture', 'AA_H_DateProcess'}
     required_entete = {'FF_H_TypeFacture', 'FF_H_NumFact', 'FF_H_TypeFactRect'}
     required_total = {'FF_T_NumFact', 'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'}
 
@@ -253,6 +259,47 @@ def get_ff_activity_totals():
                 'missing': sorted(required_total - total_set)
             }), 500
 
+        entete_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'View_FF_Entete'
+        """)).scalars().all()
+        total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'View_FF_Total'
+        """)).scalars().all()
+        aa_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'View_AA_AvecFacture'
+        """)).scalars().all()
+
+        entete_set = {c for c in entete_cols}
+        total_set = {c for c in total_cols}
+        aa_set = {c for c in aa_cols}
+
+        if not required_entete.issubset(entete_set):
+            return jsonify({
+                'error': "Colonnes manquantes dans View_FF_Entete",
+                'missing': sorted(required_entete - entete_set)
+            }), 500
+
+        if not required_total.issubset(total_set):
+            return jsonify({
+                'error': "Colonnes manquantes dans View_FF_Total",
+                'missing': sorted(required_total - total_set)
+            }), 500
+
+        if not required_aa.issubset(aa_set):
+            return jsonify({
+                'error': "Colonnes manquantes dans View_AA_AvecFacture",
+                'missing': sorted(required_aa - aa_set)
+            }), 500
+
         sql = text("""
             SELECT
                 SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
@@ -266,12 +313,16 @@ def get_ff_activity_totals():
             FROM [dbo].[View_FF_Entete] e
             JOIN [dbo].[View_FF_Total] t
               ON t.FF_T_NumFact = e.FF_H_NumFact
-            WHERE e.FF_H_TypeFactRect IS NULL
-               OR UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) <> 'CN'
+            LEFT JOIN [dbo].[View_AA_AvecFacture] a
+              ON a.AA_H_NumFacture = t.FF_T_NumFact
+            WHERE (e.FF_H_TypeFactRect IS NULL
+               OR UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) <> 'CN')
+              AND YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year
         """)
 
-        row = db.session.execute(sql).mappings().first() or {}
+        row = db.session.execute(sql, {'year': year}).mappings().first() or {}
         return jsonify({
+            'year': year,
             'timbrage': float(row.get('timbrage') or 0),
             'magasinage': float(row.get('magasinage') or 0),
             'agent': float(row.get('agent') or 0),
@@ -323,7 +374,7 @@ def get_ff_monthly_totals():
 
         sql = text("""
             SELECT
-                MONTH(a.AA_H_DateProcess) AS month,
+                MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) AS month,
                 SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis)
                     + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis)) AS total,
                 SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
@@ -334,14 +385,14 @@ def get_ff_monthly_totals():
                     THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS agent,
                 SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'S'
                     THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS surestarie
-            FROM [dbo].[View_AA_AvecFacture] a
+            FROM [dbo].[View_FF_Entete] e
             JOIN [dbo].[View_FF_Total] t
-                ON t.FF_T_NumFact = a.AA_H_NumFacture
-            LEFT JOIN [dbo].[View_FF_Entete] e
-                ON e.FF_H_NumFact = t.FF_T_NumFact
-            WHERE YEAR(a.AA_H_DateProcess) = :year
-            GROUP BY MONTH(a.AA_H_DateProcess)
-            ORDER BY MONTH(a.AA_H_DateProcess)
+                ON t.FF_T_NumFact = e.FF_H_NumFact
+            LEFT JOIN [dbo].[View_AA_AvecFacture] a
+                ON a.AA_H_NumFacture = t.FF_T_NumFact
+            WHERE YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year
+            GROUP BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
+            ORDER BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
         """)
 
         def build_series_and_activities(target_year):
@@ -422,7 +473,7 @@ def get_ff_monthly_activity_totals():
 
         sql = text("""
             SELECT
-                MONTH(a.AA_H_DateProcess) AS month,
+                MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) AS month,
                 SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
                     THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS timbrage,
                 SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'M'
@@ -431,14 +482,14 @@ def get_ff_monthly_activity_totals():
                     THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS agent,
                 SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'S'
                     THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS surestarie
-            FROM [dbo].[View_AA_AvecFacture] a
+            FROM [dbo].[View_FF_Entete] e
             JOIN [dbo].[View_FF_Total] t
-              ON t.FF_T_NumFact = a.AA_H_NumFacture
-            JOIN [dbo].[View_FF_Entete] e
-              ON e.FF_H_NumFact = t.FF_T_NumFact
-            WHERE YEAR(a.AA_H_DateProcess) = :year
-            GROUP BY MONTH(a.AA_H_DateProcess)
-            ORDER BY MONTH(a.AA_H_DateProcess)
+              ON t.FF_T_NumFact = e.FF_H_NumFact
+            LEFT JOIN [dbo].[View_AA_AvecFacture] a
+              ON a.AA_H_NumFacture = t.FF_T_NumFact
+            WHERE YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year
+            GROUP BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
+            ORDER BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
         """)
 
         def build_activity_series(target_year):
