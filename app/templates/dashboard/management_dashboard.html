@@ -995,6 +995,19 @@ document.addEventListener('DOMContentLoaded',function(){
       saveHiddenColumns();
     }
     listTitle.textContent=data.title;
+    // If showing invoices, append the month/year to the title
+    if(key==='invoices'){
+      let usedMonth=null;
+      let usedYear=null;
+      if(opts && typeof opts.month!=='undefined' && opts.month!==null) usedMonth=Number(opts.month);
+      if(opts && typeof opts.year!=='undefined' && opts.year!==null) usedYear=Number(opts.year);
+      const now=new Date();
+      if(usedMonth===null) usedMonth=now.getMonth()+1;
+      if(usedYear===null) usedYear=now.getFullYear();
+      const monthNamesFull=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+      const baseTitle=(data.title||'').replace('(mois)','').trim();
+      listTitle.textContent=`${baseTitle} ${monthNamesFull[usedMonth-1]} ${usedYear}`;
+    }
     listTableBody.innerHTML='';
     const columns=key==='generated'?columnSets.freightSummary:(data.columns||columnSets.default);
     renderColumns(columns);
