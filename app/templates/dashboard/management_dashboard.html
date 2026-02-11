@@ -535,9 +535,8 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-sub">En attente</div>
   </div>
   <div class="kpi-card" data-key="invoices" style="border-left-color:var(--color-success);">
-    <div class="kpi-title">Factures (mois)</div>
+    <div class="kpi-title">Avis avec Factures (mois)</div>
     <div class="kpi-value" data-kpi-value="invoices">0</div>
-    <div class="kpi-sub">Liste vide</div>
   </div>
 </div>
 
@@ -574,28 +573,32 @@ body.chart-only.show-chart-list .list-section {
           <span class="activity-dot" style="background:#3498db"></span>
           <span>Timbrage</span>
         </div>
-        <span data-activity-value="timbrage">0</span>
+        <span data-activity-value="timbrage">0 TND</span>
       </div>
       <div class="activity-item">
         <div class="activity-name">
           <span class="activity-dot" style="background:#2ecc71"></span>
           <span>Magasinage</span>
         </div>
-        <span data-activity-value="magasinage">0</span>
+        <span data-activity-value="magasinage">0 TND</span>
       </div>
       <div class="activity-item">
         <div class="activity-name">
           <span class="activity-dot" style="background:#f39c12"></span>
           <span>Agent</span>
         </div>
-        <span data-activity-value="agent">0</span>
+        <span data-activity-value="agent">0 TND</span>
       </div>
       <div class="activity-item">
         <div class="activity-name">
           <span class="activity-dot" style="background:#e74c3c"></span>
           <span>Surestarie</span>
         </div>
-        <span data-activity-value="surestarie">0</span>
+        <span data-activity-value="surestarie">0 TND</span>
+      </div>
+      <div style="margin-top:10px;font-weight:700;display:flex;justify-content:space-between;" id="activity-total-row">
+        <div>Total</div>
+        <div id="activity-total">0 TND</div>
       </div>
     </div>
   </div>
@@ -1407,6 +1410,9 @@ document.addEventListener('DOMContentLoaded',function(){
       maintainAspectRatio:false,
       onClick:function(evt,elements){
         if(!elements.length) return;
+        // Only open invoice list when mode is 'total' or 'detail'
+        const mode = document.getElementById('ca-mode-select')?.value || 'total';
+        if(mode !== 'total' && mode !== 'detail') return;
         const el=elements[0];
         const monthIndex=el.index; // 0-based index into labels
         const month = monthIndex + 1; // 1-based month
@@ -1506,14 +1512,17 @@ document.addEventListener('DOMContentLoaded',function(){
       plugins:{
         legend:{display:false},
         tooltip:{
-          callbacks:{
-            label:function(context){
-              const data=context.dataset.data||[];
-              const total=data.reduce((sum,val)=>sum+(Number(val)||0),0);
-              const value=Number(context.parsed)||0;
-              return `${context.label}:${value}(Total:${total})`;
+            callbacks:{
+              label:function(context){
+                const data=context.dataset.data||[];
+                const value=Number(context.parsed)||0;
+                try{
+                  return `${context.label} ${formatAmount(value)} TND`;
+                }catch(e){
+                  return `${context.label} ${value} TND`;
+                }
+              }
             }
-          }
         }
       }
     }
@@ -1526,16 +1535,23 @@ document.addEventListener('DOMContentLoaded',function(){
       if(!response.ok){
         throw new Error(data.error||'Erreur API');
       }
-      document.querySelector('[data-activity-value="timbrage"]').textContent=data.timbrage||0;
-      document.querySelector('[data-activity-value="magasinage"]').textContent=data.magasinage||0;
-      document.querySelector('[data-activity-value="agent"]').textContent=data.agent||0;
-      document.querySelector('[data-activity-value="surestarie"]').textContent=data.surestarie||0;
+      const tTimbrage = Number(data.timbrage)||0;
+      const tMagasinage = Number(data.magasinage)||0;
+      const tAgent = Number(data.agent)||0;
+      const tSurestarie = Number(data.surestarie)||0;
+      document.querySelector('[data-activity-value="timbrage"]').textContent = formatAmount(tTimbrage) + ' TND';
+      document.querySelector('[data-activity-value="magasinage"]').textContent = formatAmount(tMagasinage) + ' TND';
+      document.querySelector('[data-activity-value="agent"]').textContent = formatAmount(tAgent) + ' TND';
+      document.querySelector('[data-activity-value="surestarie"]').textContent = formatAmount(tSurestarie) + ' TND';
+      const activityTotal = tTimbrage + tMagasinage + tAgent + tSurestarie;
+      const activityTotalEl = document.getElementById('activity-total');
+      if(activityTotalEl) activityTotalEl.textContent = formatAmount(activityTotal) + ' TND';
       activityChart.data.labels=['Timbrage','Magasinage','Agent','Surestarie'];
       activityChart.data.datasets[0].data=[
-        data.timbrage||0,
-        data.magasinage||0,
-        data.agent||0,
-        data.surestarie||0
+        tTimbrage,
+        tMagasinage,
+        tAgent,
+        tSurestarie
       ];
       activityChart.data.datasets[0].backgroundColor=['#3498db','#2ecc71','#f39c12','#e74c3c'];
       activityChart.update();
