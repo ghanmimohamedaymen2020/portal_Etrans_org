@@ -647,7 +647,10 @@ body.chart-only.show-chart-list .list-section {
           <span class="activity-dot" style="background:#f39c12"></span>
           <span>Agent</span>
         </div>
-        <span data-activity-value="agent">0 TND</span>
+        <div id="activity-agent-container">
+          <!-- Agent per-currency rows will be injected here -->
+          <span data-activity-value="agent">0 TND</span>
+        </div>
       </div>
       <div class="activity-item">
         <div class="activity-name">
@@ -656,9 +659,8 @@ body.chart-only.show-chart-list .list-section {
         </div>
         <span data-activity-value="surestarie">0 TND</span>
       </div>
-      <div style="margin-top:10px;font-weight:700;display:flex;justify-content:space-between;" id="activity-total-row">
-        <div>Total</div>
-        <div id="activity-total">0 TND</div>
+      <div id="activity-currency-totals" style="margin-top:8px;font-size:0.95rem;display:flex;gap:12px;">
+        <div><strong>TND:</strong> <span id="activity-total-tnd">0</span></div>
       </div>
     </div>
   </div>
@@ -1203,6 +1205,14 @@ document.addEventListener('DOMContentLoaded',function(){
       try{
         if(listLoading) listLoading.classList.add('visible');
         items=await fetchFreightItems();
+        // show export button for generated freight items
+        if(exportCsvBtn){
+          exportCsvBtn.style.display='inline-block';
+          exportCsvBtn.onclick = function(){
+            let url = `/api/freight/items/export`;
+            window.location = url;
+          };
+        }
       }catch(err){
         listTableBody.innerHTML=`
           <tr>
@@ -1243,8 +1253,8 @@ document.addEventListener('DOMContentLoaded',function(){
     }else{
       currentItems=items;
     }
-    // hide export button for non-invoice lists
-    if(exportCsvBtn && key!=='invoices') exportCsvBtn.style.display='none';
+    // hide export button for non-invoice and non-generated lists
+    if(exportCsvBtn && key!=='invoices' && key!=='generated') exportCsvBtn.style.display='none';
     if(!items.length){
       listTableBody.innerHTML=`
         <tr>
@@ -1342,9 +1352,11 @@ document.addEventListener('DOMContentLoaded',function(){
         if(col.key.includes('date')||col.key==='eta'){
           value=formatDateValue(value);
         } else {
+          // Avoid formatting certain string columns (house, dossier, reference, names)
+          const noNumericFormat = new Set(['house','dossier','reference','nom_client','nom_commercial','eta','service']);
           // For numeric-looking columns, format with formatAmount (3 decimals)
           const asNum = (value!==null && value!==undefined && value!=='' ) ? Number(value) : NaN;
-          if(!Number.isNaN(asNum) && typeof value !== 'object' && !col.key.toLowerCase().includes('id') && !col.key.toLowerCase().includes('reference')){
+          if(!Number.isNaN(asNum) && typeof value !== 'object' && !col.key.toLowerCase().includes('id') && !col.key.toLowerCase().includes('reference') && !noNumericFormat.has(col.key)){
             value = formatAmount(asNum);
           }
         }
@@ -1779,30 +1791,105 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function loadActivityData(){
     try{
-      const response=await fetch('/api/factures/ff-activity');
-      const data=await response.json();
-      if(!response.ok){
-        throw new Error(data.error||'Erreur API');
-      }
-      const tTimbrage = Number(data.timbrage)||0;
-      const tMagasinage = Number(data.magasinage)||0;
-      const tAgent = Number(data.agent)||0;
-      const tSurestarie = Number(data.surestarie)||0;
+      const response = await fetch('/api/factures/ca-activite');
+      const data = await response.json();
+      if(!response.ok) throw new Error(data.error||'Erreur API');
+      const rows = data.rows || [];
+      // Aggregate rows: keep Timbrage/Magasinage/Surestarie single, split Agent by currency
+      const map = {};
+      let agentTotal = 0;
+      rows.forEach(r=>{
+        const raw = (r.type_service||'').toString().trim();
+        if(!raw) return;
+        const first = raw[0].toUpperCase();
+        const val = Number(r.total_ttc)||0;
+        if(first === 'A'){
+          // keep agent entries per currency (e.g. 'A - EUR')
+          const label = raw; // preserve original 'A - EUR' format
+          map[label] = (map[label]||0) + val;
+          agentTotal += val;
+        }else if(first === 'T'){
+          map['Timbrage'] = (map['Timbrage']||0) + val;
+        }else if(first === 'M'){
+          map['Magasinage'] = (map['Magasinage']||0) + val;
+        }else if(first === 'S'){
+          map['Surestarie'] = (map['Surestarie']||0) + val;
+        }else{
+          // unknown, add as-is
+          map[raw] = (map[raw]||0) + val;
+        }
+      });
+
+      const tTimbrage = Number(map['Timbrage']||0);
+      const tMagasinage = Number(map['Magasinage']||0);
+      const tSurestarie = Number(map['Surestarie']||0);
+      // compute totals by currency: agent entries specify currency after '-'
+      const totalsByCurrency = {};
+      rows.forEach(r=>{
+        const raw = (r.type_service||'').toString().trim();
+        if(!raw) return;
+        const parts = raw.split('-').map(s=>s.trim());
+        if(parts.length>1){
+          // agent with currency like 'A - USD'
+          const cur = parts[1].toUpperCase();
+          totalsByCurrency[cur] = (totalsByCurrency[cur]||0) + (Number(r.total_ttc)||0);
+        } else {
+          // non-agent assumed TND
+          totalsByCurrency['TND'] = (totalsByCurrency['TND']||0) + (Number(r.total_ttc)||0);
+        }
+      });
+
       document.querySelector('[data-activity-value="timbrage"]').textContent = formatAmount(tTimbrage) + ' TND';
       document.querySelector('[data-activity-value="magasinage"]').textContent = formatAmount(tMagasinage) + ' TND';
-      document.querySelector('[data-activity-value="agent"]').textContent = formatAmount(tAgent) + ' TND';
+      document.querySelector('[data-activity-value="agent"]').textContent = formatAmount(agentTotal) + ' TND';
       document.querySelector('[data-activity-value="surestarie"]').textContent = formatAmount(tSurestarie) + ' TND';
-      const activityTotal = tTimbrage + tMagasinage + tAgent + tSurestarie;
-      const activityTotalEl = document.getElementById('activity-total');
-      if(activityTotalEl) activityTotalEl.textContent = formatAmount(activityTotal) + ' TND';
-      activityChart.data.labels=['Timbrage','Magasinage','Agent','Surestarie'];
-      activityChart.data.datasets[0].data=[
-        tTimbrage,
-        tMagasinage,
-        tAgent,
-        tSurestarie
-      ];
-      activityChart.data.datasets[0].backgroundColor=['#3498db','#2ecc71','#f39c12','#e74c3c'];
+      // overall total row removed per request; currency totals shown below
+
+      // Build labels: keep order Timbrage, Magasinage, then Agent currencies, then Surestarie
+      const agentLabels = Object.keys(map).filter(k=>k && k[0].toUpperCase()==='A').sort();
+      const labels = ['Timbrage','Magasinage', ...agentLabels, 'Surestarie'].filter((v,i,a)=>a.indexOf(v)===i);
+      const dataVals = labels.map(l=> Number(map[l]||0));
+      const palette = ['#3498db','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#34495e','#e67e22'];
+      const bg = labels.map((_,i)=> palette[i%palette.length]);
+      activityChart.data.labels = labels;
+      activityChart.data.datasets[0].data = dataVals;
+      activityChart.data.datasets[0].backgroundColor = bg;
+      // update currency totals UI (TND only)
+      const tndEl = document.getElementById('activity-total-tnd');
+      if(tndEl) tndEl.textContent = formatAmount(totalsByCurrency['TND']||0) + ' TND';
+
+      // render agent per-currency rows in the activity list
+      const agentContainer = document.getElementById('activity-agent-container');
+      if(agentContainer){
+        // clear except keep a fallback total element if present
+        agentContainer.innerHTML = '';
+        const sortedAgentKeys = agentLabels.slice().sort();
+        if(sortedAgentKeys.length===0){
+          // show aggregated agent KPI fallback
+          const span = document.createElement('span');
+          span.textContent = formatAmount(agentTotal) + ' TND';
+          agentContainer.appendChild(span);
+        } else {
+          sortedAgentKeys.forEach(k=>{
+            const val = Number(map[k]||0);
+            const row = document.createElement('div');
+            row.style.display='flex';
+            row.style.justifyContent='space-between';
+            row.style.gap='8px';
+            row.style.marginTop='4px';
+            const left = document.createElement('div');
+            left.textContent = k.replace(/^A\s*-\s*/i,'Agent - ');
+            const right = document.createElement('div');
+            // decide currency suffix from label
+            const parts = k.split('-').map(s=>s.trim());
+            const cur = parts.length>1?parts[1].toUpperCase():'TND';
+            right.textContent = formatAmount(val) + ' ' + (cur==='USD'?'USD':(cur==='EUR'?'EUR':'TND'));
+            row.appendChild(left);
+            row.appendChild(right);
+            agentContainer.appendChild(row);
+          });
+        }
+      }
       activityChart.update();
     }catch(err){
       console.error('Erreur chargement activité:',err);

@@ -454,6 +454,83 @@ def get_ff_activity_totals():
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
+
+@api_bp.route('/factures/ca-activite', methods=['GET'])
+@login_required
+def get_ca_par_activite():
+    """Chiffre d'affaires par activité (group by TypeService) using View_FF_Entete + View_FF_Detail.
+    Accepts optional `year` query param (defaults to current year).
+    """
+    year = request.args.get('year', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    # required columns to compute provided SQL
+    required_entete = {'FF_H_TypeFacture', 'FF_H_NumFact', 'FF_H_DateProcess'}
+    required_detail = {'FF_D_NumFact', 'FF_D_Devise', 'FF_D_MontantHT_TND', 'FF_D_Montant', 'FF_D_MontantTVA', 'FF_D_MontantTTC'}
+
+    try:
+        entete_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Entete'
+        """)).scalars().all()
+        detail_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Detail'
+        """)).scalars().all()
+
+        entete_set = {c for c in entete_cols}
+        detail_set = {c for c in detail_cols}
+
+        missing = []
+        if not required_entete.issubset(entete_set):
+            missing.extend(sorted(required_entete - entete_set))
+        if not required_detail.issubset(detail_set):
+            missing.extend(sorted(required_detail - detail_set))
+        if missing:
+            return jsonify({'error': 'Colonnes manquantes', 'missing': missing}), 500
+
+        sql = text("""
+            SELECT
+                CASE
+                    WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
+                        THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
+                    ELSE H.FF_H_TypeFacture
+                END AS TypeService,
+                SUM(ISNULL(D.FF_D_MontantHT_TND,0)) AS Total_HT,
+                SUM(ISNULL(D.FF_D_Montant,0)) AS Total_Soumis,
+                SUM(ISNULL(D.FF_D_MontantTVA,0)) AS Total_TVA,
+                SUM(ISNULL(D.FF_D_MontantTTC,0)) AS Total_TTC
+            FROM [dbo].[View_FF_Entete] H
+            INNER JOIN [dbo].[View_FF_Detail] D
+                ON H.FF_H_NumFact = D.FF_D_NumFact
+            WHERE UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) IN ('T','S','A','M')
+              AND YEAR(H.FF_H_DateProcess) = :year
+            GROUP BY
+                CASE
+                    WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
+                        THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
+                    ELSE H.FF_H_TypeFacture
+                END
+            ORDER BY TypeService
+        """)
+
+        rows = db.session.execute(sql, {'year': year}).mappings().all()
+        results = []
+        for r in rows:
+            results.append({
+                'type_service': r.get('TypeService'),
+                'total_ht': float(r.get('Total_HT') or 0),
+                'total_soumis': float(r.get('Total_Soumis') or 0),
+                'total_tva': float(r.get('Total_TVA') or 0),
+                'total_ttc': float(r.get('Total_TTC') or 0)
+            })
+
+        return jsonify({'year': year, 'rows': results})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
 @api_bp.route('/factures/ff-monthly', methods=['GET'])
 @login_required
 def get_ff_monthly_totals():
@@ -1023,3 +1100,277 @@ def get_freight_items():
         return jsonify({'items': items, 'total': len(items)})
     except Exception as exc:
         return jsonify({'items': [], 'total': 0, 'error': str(exc)}), 500
+
+
+@api_bp.route('/freight/items/export', methods=['GET'])
+@login_required
+def export_freight_items_csv():
+    """Export freight items as CSV."""
+    try:
+        cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'View_FREIGHT'
+        """)).scalars().all()
+        col_set = {c for c in cols}
+
+        required_cols = {
+            'Devise', 'dossier', 'house', 'MontAchat', 'MontVente',
+            'ETA', 'FournisseurNom', 'DateCreation', 'Ioe', 'PoC',
+            'Refrence_AA', 'IdUtilisateur', 'EmailUtilisateur'
+        }
+
+        if not required_cols.issubset(col_set):
+            return jsonify({
+                'error': 'Colonnes manquantes dans View_FREIGHT',
+                'missing': sorted(required_cols - col_set)
+            }), 500
+
+        sql = text("""
+            SELECT
+                Devise,
+                dossier,
+                house,
+                MontAchat,
+                MontVente,
+                ETA,
+                FournisseurNom,
+                DateCreation,
+                Ioe,
+                PoC,
+                Refrence_AA,
+                IdUtilisateur,
+                EmailUtilisateur
+            FROM [dbo].[View_FREIGHT]
+        """)
+
+        rows = db.session.execute(sql).mappings().all()
+
+        import io, csv
+        output = io.StringIO()
+        headers = ['devise','dossier','house','mont_achat','mont_vente','eta','fournisseur','date_creation','ioe','poc','reference_aa','id_utilisateur','email_utilisateur']
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow(headers)
+        for r in rows:
+            writer.writerow([
+                r.get('Devise'),
+                r.get('dossier'),
+                r.get('house'),
+                r.get('MontAchat'),
+                r.get('MontVente'),
+                r.get('ETA'),
+                r.get('FournisseurNom'),
+                r.get('DateCreation'),
+                r.get('Ioe'),
+                r.get('PoC'),
+                r.get('Refrence_AA'),
+                r.get('IdUtilisateur'),
+                r.get('EmailUtilisateur')
+            ])
+
+        csv_data = output.getvalue()
+        return Response(csv_data, mimetype='text/csv', headers={
+            'Content-Disposition': 'attachment; filename="freight_items.csv"'
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/aa-detail/export', methods=['GET'])
+@login_required
+def export_aa_detail_csv():
+    """Export AA detail / invoices as CSV (falls back to FF entete if AA view missing)."""
+    try:
+        # Reuse much of get_factures_aa_detail logic to build rows
+        desired_columns = [
+            'AA_H_ID',
+            'AA_H_Reference',
+            'AA_H_DateProcess',
+            'AA_H_Dossier',
+            'AA_H_NomClient',
+            'AA_H_ETA',
+            'AA_H_House',
+            'AA_H_Service',
+            'AA_H_IdCommercial',
+            'AA_H_NomCommercial'
+        ]
+        total_column = 'FF_T_TotalTTC'
+
+        columns = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'View_AA_AvecFacture'
+        """)).scalars().all()
+        column_set = {c for c in columns}
+
+        selected_columns = [c for c in desired_columns if c in column_set]
+        output_rows = []
+
+        # If AA view not usable, fallback to FF entete/total
+        if not selected_columns:
+            ff_entete_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_FF_Entete'
+            """)).scalars().all()
+            ff_total_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_FF_Total'
+            """)).scalars().all()
+            ff_set = {c for c in ff_entete_cols}
+            total_set = {c for c in ff_total_cols}
+
+            ff_select = [
+                'e.FF_H_NumFact AS AA_H_Reference',
+                'e.FF_H_DateProcess AS AA_H_DateProcess',
+                'e.FF_H_Dossier AS AA_H_Dossier'
+            ]
+            if 'FF_H_NomClient' in ff_set:
+                ff_select.append('e.FF_H_NomClient AS AA_H_NomClient')
+            else:
+                ff_select.append("NULL AS AA_H_NomClient")
+            if 'FF_H_ETA' in ff_set:
+                ff_select.append('e.FF_H_ETA AS AA_H_ETA')
+            else:
+                ff_select.append("NULL AS AA_H_ETA")
+            if 'FF_H_House' in ff_set:
+                ff_select.append('e.FF_H_House AS AA_H_House')
+            else:
+                ff_select.append("NULL AS AA_H_House")
+            if 'FF_H_Service' in ff_set:
+                ff_select.append('e.FF_H_Service AS AA_H_Service')
+            else:
+                ff_select.append("NULL AS AA_H_Service")
+            if 'FF_H_IdCommercial' in ff_set:
+                ff_select.append('e.FF_H_IdCommercial AS AA_H_IdCommercial')
+            elif 'FF_H_NomCommercial' in ff_set:
+                ff_select.append('e.FF_H_NomCommercial AS AA_H_NomCommercial')
+            else:
+                ff_select.append("NULL AS AA_H_IdCommercial")
+
+            if 'FF_T_TotalTTC' in total_set:
+                ff_select.append('t.FF_T_TotalTTC AS total_ttc')
+            else:
+                ff_select.append("NULL AS total_ttc")
+            if 'FF_T_TotalNonSoumis' in total_set:
+                ff_select.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+            else:
+                ff_select.append("NULL AS ff_total_non_soumis")
+            if 'FF_T_TotalSoumis' in total_set:
+                ff_select.append('t.FF_T_TotalSoumis AS ff_total_soumis')
+            else:
+                ff_select.append("NULL AS ff_total_soumis")
+            if 'FF_T_TotalTVA' in total_set:
+                ff_select.append('t.FF_T_TotalTVA AS ff_total_tva')
+            else:
+                ff_select.append("NULL AS ff_total_tva")
+
+            fallback_sql = text(f"SELECT {', '.join(ff_select)} FROM [dbo].[View_FF_Entete] e LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact ORDER BY e.FF_H_DateProcess DESC")
+            rows = db.session.execute(fallback_sql).mappings().all()
+            for row in rows:
+                output_rows.append({
+                    'reference': row.get('AA_H_Reference'),
+                    'date_process': row.get('AA_H_DateProcess'),
+                    'dossier': row.get('AA_H_Dossier'),
+                    'nom_client': row.get('AA_H_NomClient'),
+                    'eta': row.get('AA_H_ETA'),
+                    'house': row.get('AA_H_House'),
+                    'service': row.get('AA_H_Service'),
+                    'id_commercial': row.get('AA_H_IdCommercial') or row.get('AA_H_NomCommercial'),
+                    'total_ttc': row.get('total_ttc'),
+                    'ff_total_non_soumis': row.get('ff_total_non_soumis'),
+                    'ff_total_soumis': row.get('ff_total_soumis'),
+                    'ff_total_tva': row.get('ff_total_tva')
+                })
+        else:
+            # Build select parts for AA view with optional totals
+            total_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_FF_Total'
+            """)).scalars().all()
+            total_set = {c for c in total_cols}
+
+            select_parts = [f"a.{col}" for col in selected_columns]
+            if total_column in total_set:
+                select_parts.append(f"t.{total_column} AS total_ttc")
+            if 'FF_T_TotalNonSoumis' in total_set:
+                select_parts.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+            if 'FF_T_TotalSoumis' in total_set:
+                select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis')
+            if 'FF_T_TotalTVA' in total_set:
+                select_parts.append('t.FF_T_TotalTVA AS ff_total_tva')
+
+            aa_total_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo'
+                  AND TABLE_NAME = 'View_AA_Total'
+            """)).scalars().all()
+            aa_total_set = {c for c in aa_total_cols}
+
+            aa_join_col = None
+            if 'AA_T_NumFact' in aa_total_set:
+                aa_join_col = 'AA_T_NumFact'
+            elif 'AA_T_NumFacture' in aa_total_set:
+                aa_join_col = 'AA_T_NumFacture'
+
+            if aa_join_col:
+                if 'AA_T_TotalNonSoumis' in aa_total_set:
+                    select_parts.append('at.AA_T_TotalNonSoumis AS aa_total_non_soumis')
+                if 'AA_T_TotalSoumis' in aa_total_set:
+                    select_parts.append('at.AA_T_TotalSoumis AS aa_total_soumis')
+                if 'AA_T_TotalTVA' in aa_total_set:
+                    select_parts.append('at.AA_T_TotalTVA AS aa_total_tva')
+
+            join_at_clause = ''
+            if aa_join_col:
+                join_at_clause = f"LEFT JOIN [dbo].[View_AA_Total] at ON at.{aa_join_col} = a.AA_H_NumFacture"
+
+            sql = text(f"SELECT {', '.join(select_parts)} FROM [dbo].[View_AA_AvecFacture] a LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = a.AA_H_NumFacture {join_at_clause} ORDER BY a.AA_H_DateProcess DESC")
+            rows = db.session.execute(sql).mappings().all()
+            for row in rows:
+                output_rows.append({
+                    'reference': row.get('AA_H_Reference'),
+                    'date_process': row.get('AA_H_DateProcess'),
+                    'dossier': row.get('AA_H_Dossier'),
+                    'nom_client': row.get('AA_H_NomClient'),
+                    'eta': row.get('AA_H_ETA'),
+                    'house': row.get('AA_H_House'),
+                    'service': row.get('AA_H_Service'),
+                    'id_commercial': row.get('AA_H_IdCommercial'),
+                    'nom_commercial': row.get('AA_H_NomCommercial'),
+                    'total_ttc': row.get('total_ttc'),
+                    'ff_total_non_soumis': row.get('ff_total_non_soumis'),
+                    'ff_total_soumis': row.get('ff_total_soumis'),
+                    'ff_total_tva': row.get('ff_total_tva'),
+                    'aa_total_non_soumis': row.get('aa_total_non_soumis'),
+                    'aa_total_soumis': row.get('aa_total_soumis'),
+                    'aa_total_tva': row.get('aa_total_tva')
+                })
+
+        import io, csv
+        output = io.StringIO()
+        if not output_rows:
+            return Response(output.getvalue(), mimetype='text/csv', headers={
+                'Content-Disposition': 'attachment; filename="invoices.csv"'
+            })
+
+        headers = list(output_rows[0].keys())
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow(headers)
+        for r in output_rows:
+            writer.writerow([r.get(h) for h in headers])
+
+        csv_data = output.getvalue()
+        return Response(csv_data, mimetype='text/csv', headers={
+            'Content-Disposition': 'attachment; filename="invoices.csv"'
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
