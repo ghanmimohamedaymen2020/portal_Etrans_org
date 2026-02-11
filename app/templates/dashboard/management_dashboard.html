@@ -921,8 +921,8 @@ document.addEventListener('DOMContentLoaded',function(){
   function formatAmount(value){
     const number=Number(value)||0;
     return number.toLocaleString('fr-FR',{
-      minimumFractionDigits:2,
-      maximumFractionDigits:2
+      minimumFractionDigits:3,
+      maximumFractionDigits:3
     });
   }
 
@@ -1186,8 +1186,15 @@ document.addEventListener('DOMContentLoaded',function(){
       const tr=document.createElement('tr');
       tr.innerHTML=columns.map(col=>{
         let value=item[col.key]??'';
+        // format dates
         if(col.key.includes('date')||col.key==='eta'){
           value=formatDateValue(value);
+        } else {
+          // For numeric-looking columns, format with formatAmount (3 decimals)
+          const asNum = (value!==null && value!==undefined && value!=='' ) ? Number(value) : NaN;
+          if(!Number.isNaN(asNum) && typeof value !== 'object' && !col.key.toLowerCase().includes('id') && !col.key.toLowerCase().includes('reference')){
+            value = formatAmount(asNum);
+          }
         }
         const hiddenClass=hiddenColumns.has(col.key)?'hidden-col':'';
         return `<td data-col="${col.key}" class="${hiddenClass}">${value}</td>`;
@@ -1441,7 +1448,7 @@ document.addEventListener('DOMContentLoaded',function(){
           callbacks:{
             label:function(context){
               const val = (context.parsed && (context.parsed.y !== undefined ? context.parsed.y : context.parsed)) || 0;
-              try{ return `${Number(val).toLocaleString('fr-FR')} TND`; }catch(e){ return `${val} TND`; }
+              try{ return `${formatAmount(val)} TND`; }catch(e){ return `${val} TND`; }
             }
           }
         }
