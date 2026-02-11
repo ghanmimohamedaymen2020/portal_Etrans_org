@@ -234,9 +234,14 @@ body.list-only .list-section {
 }
 
 .list-table {
-  width: 100%;
+width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
+}
+
+.table-responsive-taux {
+  max-height: 400px;   /* hauteur du scroll */
+  overflow-y: auto;
+  overflow-x: auto;
 }
 
 .list-table th,
@@ -377,6 +382,32 @@ body.chart-only.show-chart-list .list-section {
   box-shadow: var(--box-shadow);
 }
 
+/* Modal for invoice list */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.modal-overlay.visible { display: flex; }
+.modal-content {
+  background: #fff;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 80vh;
+  overflow: auto;
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+.modal-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:8px }
+.modal-close { background:none;border:0;font-size:1.1rem;cursor:pointer }
+.modal-table { width:100%; border-collapse:collapse }
+.modal-table th, .modal-table td{ padding:6px 8px;border-bottom:1px solid var(--color-border); text-align:left }
+
 .chart-header {
   display: flex;
   justify-content: space-between;
@@ -404,9 +435,11 @@ body.chart-only.show-chart-list .list-section {
   display: block;
 }
 
+
 .devise-commercial-summary {
-  margin-top: 20px;
+ max-height: 500px;   /* hauteur que tu veux */
 }
+
 
 .devise-commercial-header {
   display: flex;
@@ -616,16 +649,16 @@ body.chart-only.show-chart-list .list-section {
     <canvas id="deviseChart"></canvas>
   </div>
   <div class="devise-commercial-summary">
-    <div class="list-header" style="margin-bottom:8px;">
+    <div class="list-header"   >
       <div class="list-title" id="devise-commercial-title">Totaux par commercial</div>
       <div class="list-actions" style="align-items:center;gap:8px;">
         <div class="filter-label" id="devise-commercial-filter"></div>
       </div>
     </div>
-    <div class="table-responsive">
-      <table class="list-table" >
+    <div class="table-responsive-taux">
+      <table class="list-table"   >
       <!--      <table class="list-table devise-commercial-table">-->
-        <thead>
+        <thead >
           <tr>
             <th>Devise</th>
             <th>Commercial</th>
@@ -635,6 +668,38 @@ body.chart-only.show-chart-list .list-section {
           </tr>
         </thead>
         <tbody id="devise-commercial-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Invoices for selected month -->
+<div id="invoices-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="invoices-modal-title">Factures</h3>
+      <div>
+        <button id="invoices-modal-close" class="modal-close" aria-label="Fermer">✕</button>
+      </div>
+    </div>
+    <div style="overflow:auto;">
+      <table class="modal-table" id="invoices-modal-table">
+        <thead>
+          <tr>
+            <th>Numéro avis</th>
+            <th>Date</th>
+            <th>Dossier</th>
+            <th>Client</th>
+            <th>ETA</th>
+            <th>House</th>
+            <th>Service</th>
+            <th>Total Non Soumis</th>
+            <th>Total Soumis</th>
+            <th>Total TVA</th>
+            <th>Total TTC</th>
+          </tr>
+        </thead>
+        <tbody id="invoices-modal-body"></tbody>
       </table>
     </div>
   </div>
@@ -776,6 +841,9 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'house',label:'House'},
       {key:'service',label:'Service'},
       {key:'nom_commercial',label:'Nom Commercial'},
+      {key:'ff_total_non_soumis',label:'Total Non Soumis'},
+      {key:'ff_total_soumis',label:'Total Soumis'},
+      {key:'ff_total_tva',label:'Total TVA'},
       {key:'total_ttc',label:'Total TTC'}
     ],
     default:[
@@ -1126,21 +1194,22 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function initKpiCounts(){
     try{
-      const items=await fetchInvoices();
-      setKpiValue('not-stamped',items.length);
+      // Get total invoices (not-stamped KPI)
+      const totalResp = await fetch('/api/factures/count');
+      const totalJson = await totalResp.json();
+      setKpiValue('not-stamped', totalJson.count || 0);
+
+      // Get current month invoice count for the 'invoices' KPI
       try{
-        const now=new Date();
-        const curYear=now.getFullYear();
-        const curMonth=now.getMonth()+1;
-        const monthCount=items.reduce((count,it)=>{
-          if(!it.date_process) return count;
-          const d=new Date(it.date_process);
-          if(Number.isNaN(d.getTime())) return count;
-          return count+((d.getFullYear()===curYear&&(d.getMonth()+1)===curMonth)?1:0);
-        },0);
-        setKpiValue('invoices',monthCount);
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        const monthResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}`);
+        const monthJson = await monthResp.json();
+        setKpiValue('invoices', monthJson.count || 0);
       }catch(e){
-        setKpiValue('invoices',items.length);
+        // Fallback to zero on error
+        setKpiValue('invoices', 0);
       }
     }catch{
       setKpiValue('not-stamped',0);
@@ -1500,6 +1569,63 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   loadMonthlyTurnover();
+
+  // Invoices modal logic
+  const invoicesModal = document.getElementById('invoices-modal');
+  const invoicesModalBody = document.getElementById('invoices-modal-body');
+  const invoicesModalTitle = document.getElementById('invoices-modal-title');
+  const invoicesModalClose = document.getElementById('invoices-modal-close');
+
+  function closeInvoicesModal(){
+    if(!invoicesModal) return;
+    invoicesModal.classList.remove('visible');
+    invoicesModal.setAttribute('aria-hidden','true');
+    invoicesModalBody.innerHTML='';
+  }
+
+  function openInvoicesModal(){
+    if(!invoicesModal) return;
+    invoicesModal.classList.add('visible');
+    invoicesModal.setAttribute('aria-hidden','false');
+  }
+
+  invoicesModalClose?.addEventListener('click', closeInvoicesModal);
+  invoicesModal?.addEventListener('click', function(e){ if(e.target===invoicesModal) closeInvoicesModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeInvoicesModal(); });
+
+  async function showInvoicesModal(month, year){
+    try{
+      invoicesModalTitle.textContent = `Factures — ${month}/${year}`;
+      // reuse fetchInvoices (calls /api/factures/aa-detail)
+      const all = await fetchInvoices();
+      const filtered = (all||[]).filter(it=>{
+        if(!it.date_process) return false;
+        const d=new Date(it.date_process);
+        if(Number.isNaN(d.getTime())) return false;
+        return d.getFullYear()===Number(year) && (d.getMonth()+1)===Number(month);
+      });
+      if(!filtered.length){
+        invoicesModalBody.innerHTML = `<tr><td colspan="8">Aucune facture trouvée pour ${month}/${year}</td></tr>`;
+      }else{
+        invoicesModalBody.innerHTML = filtered.map(row=>{
+          return `<tr>
+            <td>${row.AA_H_Reference||row.reference||row.reference}</td>
+            <td>${formatDateValue(row.AA_H_DateProcess||row.date_process)}</td>
+            <td>${row.AA_H_Dossier||row.dossier||''}</td>
+            <td>${row.AA_H_NomClient||row.nom_client||''}</td>
+            <td>${row.AA_H_ETA||row.eta||''}</td>
+            <td>${row.AA_H_House||row.house||''}</td>
+            <td>${row.AA_H_Service||row.service||''}</td>
+            <td>${(row.total_ttc!==undefined?formatAmount(row.total_ttc): (row.FF_T_TotalTTC?formatAmount(row.FF_T_TotalTTC):'0'))} TND</td>
+          </tr>`;
+        }).join('');
+      }
+      openInvoicesModal();
+    }catch(err){
+      invoicesModalBody.innerHTML = `<tr><td colspan="8">Erreur: ${err.message}</td></tr>`;
+      openInvoicesModal();
+    }
+  }
 
   const activityCtx=document.getElementById('activityChart').getContext('2d');
   const activityChart=new Chart(activityCtx,{

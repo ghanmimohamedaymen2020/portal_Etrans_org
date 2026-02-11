@@ -150,8 +150,7 @@ def get_factures_aa_detail():
         'AA_H_House',
         'AA_H_Service',
         'AA_H_IdCommercial',
-        'AA_H_NomCommercial',
-        'AA_H_NumFacture'
+        'AA_H_NomCommercial'
     ]
     total_column = 'FF_T_TotalTTC'
 
@@ -174,17 +173,55 @@ def get_factures_aa_detail():
 
         order_by = 'AA_H_DateProcess' if 'AA_H_DateProcess' in column_set else selected_columns[0]
 
-        total_exists = db.session.execute(text("""
+        # Inspect available columns on View_FF_Total to include totals when present
+        total_cols = db.session.execute(text("""
             SELECT COLUMN_NAME
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'dbo'
               AND TABLE_NAME = 'View_FF_Total'
-              AND COLUMN_NAME = :col
-        """), {'col': total_column}).scalars().first() is not None
+        """)).scalars().all()
+        total_set = {c for c in total_cols}
+        total_exists = total_column in total_set
+
+        # Also check for AA totals (View_AA_Total) and include if available
+        aa_total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo'
+              AND TABLE_NAME = 'View_AA_Total'
+        """)).scalars().all()
+        aa_total_set = {c for c in aa_total_cols}
 
         select_parts = [f"a.{col}" for col in selected_columns]
         if total_exists:
             select_parts.append(f"t.{total_column} AS total_ttc")
+        # Add detailed FF total columns if present
+        if 'FF_T_TotalNonSoumis' in total_set:
+            select_parts.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+        if 'FF_T_TotalSoumis' in total_set:
+            select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis')
+        if 'FF_T_TotalTVA' in total_set:
+            select_parts.append('t.FF_T_TotalTVA AS ff_total_tva')
+
+        # Determine join column name in View_AA_Total (could be AA_T_NumFact or AA_T_NumFacture)
+        aa_join_col = None
+        if 'AA_T_NumFact' in aa_total_set:
+            aa_join_col = 'AA_T_NumFact'
+        elif 'AA_T_NumFacture' in aa_total_set:
+            aa_join_col = 'AA_T_NumFacture'
+
+        # include AA totals if present and we have a join key
+        if aa_join_col:
+            if 'AA_T_TotalNonSoumis' in aa_total_set:
+                select_parts.append(f'at.AA_T_TotalNonSoumis AS aa_total_non_soumis')
+            if 'AA_T_TotalSoumis' in aa_total_set:
+                select_parts.append(f'at.AA_T_TotalSoumis AS aa_total_soumis')
+            if 'AA_T_TotalTVA' in aa_total_set:
+                select_parts.append(f'at.AA_T_TotalTVA AS aa_total_tva')
+        # Build optional join to View_AA_Total using the detected join column name
+        join_at_clause = ''
+        if aa_join_col:
+            join_at_clause = f"LEFT JOIN [dbo].[View_AA_Total] at ON at.{aa_join_col} = a.AA_H_NumFacture"
 
         sql = text(f"""
             SELECT {top_clause}
@@ -192,6 +229,7 @@ def get_factures_aa_detail():
             FROM [dbo].[View_AA_AvecFacture] a
             LEFT JOIN [dbo].[View_FF_Total] t
               ON t.FF_T_NumFact = a.AA_H_NumFacture
+            {join_at_clause}
             ORDER BY a.{order_by} DESC
         """)
 
@@ -207,8 +245,14 @@ def get_factures_aa_detail():
                 'service': row.get('AA_H_Service'),
                 'id_commercial': row.get('AA_H_IdCommercial'),
                 'nom_commercial': row.get('AA_H_NomCommercial'),
-                'num_facture': row.get('AA_H_NumFacture'),
-                'total_ttc': row.get('total_ttc')
+                
+                'total_ttc': row.get('total_ttc'),
+                'ff_total_non_soumis': row.get('ff_total_non_soumis'),
+                'ff_total_soumis': row.get('ff_total_soumis'),
+                'ff_total_tva': row.get('ff_total_tva'),
+                'aa_total_non_soumis': row.get('aa_total_non_soumis'),
+                'aa_total_soumis': row.get('aa_total_soumis'),
+                'aa_total_tva': row.get('aa_total_tva')
             }
             for row in rows
         ]
@@ -517,6 +561,49 @@ def get_ff_monthly_activity_totals():
 def get_freight_by_devise():
     """Total marge sur fret par devise depuis View_FREIGHT."""
     required_cols = {'Devise', 'MontAchat', 'MontVente'}
+
+
+@api_bp.route('/factures/count', methods=['GET'])
+@login_required
+def get_factures_count():
+    """Retourne le nombre de factures; optionnellement pour un mois/année donné.
+    Query uses View_FF_Entete (FF_H_DateProcess). Defaults to current month/year.
+    Params: month (1-12), year (YYYY)
+    """
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    # Default to current month/year when not provided (user expects current month count)
+    if month is None or year is None:
+        from datetime import datetime
+        now = datetime.utcnow()
+        if month is None:
+            month = now.month
+        if year is None:
+            year = now.year
+    try:
+        # Build WHERE clauses
+        where_clauses = []
+        params = {}
+        # Count based on FF_H_DateProcess to match DB direct count on View_FF_Entete
+        date_expr = "e.FF_H_DateProcess"
+        if month:
+            where_clauses.append(f"MONTH({date_expr}) = :month")
+            params['month'] = month
+        if year:
+            where_clauses.append(f"YEAR({date_expr}) = :year")
+            params['year'] = year
+
+        where_sql = ('WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
+        sql = text(f"""
+            SELECT COUNT(1) AS cnt
+            FROM [dbo].[View_FF_Entete] e
+            {where_sql}
+        """)
+
+        row = db.session.execute(sql, params).mappings().first() or {}
+        return jsonify({'count': int(row.get('cnt') or 0)})
+    except Exception as exc:
+        return jsonify({'count': 0, 'error': str(exc)}), 500
 
 @api_bp.route('/freight/items', methods=['GET'])
 @login_required
