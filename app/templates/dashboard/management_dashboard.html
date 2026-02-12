@@ -583,7 +583,7 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-sub">En attente</div>
   </div>
   <div class="kpi-card" data-key="invoices" style="border-left-color:var(--color-success);">
-    <div class="kpi-title">Timbrage (mois)</div>
+    <div class="kpi-title">Factures Timbrage (mois)</div>
     <div class="kpi-value" data-kpi-value="invoices">0</div>
   </div>
     <div class="kpi-card" data-key="invoices-agent" style="border-left-color:#6f42c1;">
@@ -1182,6 +1182,13 @@ document.addEventListener('DOMContentLoaded',function(){
               items=await fetchInvoices();
             }
         if(key==='not-stamped'){
+          // enable CSV export for not-stamped list
+          if(exportCsvBtn){
+            exportCsvBtn.style.display='inline-block';
+            exportCsvBtn.onclick = function(){
+              window.location = '/api/factures/aa-detail/export';
+            };
+          }
           setKpiValue('not-stamped',items.length);
         }
         // Filtrer les factures pour la liste 'invoices' (optionnel: mois/année)
@@ -1271,8 +1278,8 @@ document.addEventListener('DOMContentLoaded',function(){
     }else{
       currentItems=items;
     }
-    // hide export button for non-invoice and non-generated lists
-    if(exportCsvBtn && key!=='invoices' && key!=='generated') exportCsvBtn.style.display='none';
+    // hide export button for lists that don't support export (allow invoices, generated and not-stamped)
+    if(exportCsvBtn && !['invoices','generated','not-stamped'].includes(key)) exportCsvBtn.style.display='none';
     if(!items.length){
       listTableBody.innerHTML=`
         <tr>

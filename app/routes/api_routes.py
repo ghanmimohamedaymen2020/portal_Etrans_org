@@ -1,4 +1,6 @@
 from flask import jsonify, request, Response
+import io
+import csv
 from flask_login import login_required, current_user
 from app import db
 from app.models import Dossier, AvisArrivee, User
@@ -1079,6 +1081,48 @@ def get_factures_count():
         return jsonify({'count': int(row.get('cnt') or 0)})
     except Exception as exc:
         return jsonify({'count': 0, 'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/aa-detail/export', methods=['GET'])
+@login_required
+def export_aa_detail():
+    """Exporter les lignes de View_AA_SansFacture au format CSV (colonnes réduites)."""
+    try:
+        sans_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_SansFacture'
+        """)).scalars().all()
+        if not sans_cols:
+            return jsonify({'error': 'View_AA_SansFacture not available'}), 404
+
+        # Columns the UI displays for not-stamped -- export only these if present
+        desired = [
+            'AA_H_Dossier','AA_H_NomClient','AA_H_TVA','AA_H_Voyage','AA_H_Navire',
+            'AA_H_ETA','AA_H_Traduccion','AA_H_House','AA_H_MasterBL','AA_H_Service',
+            'AA_H_Escale','AA_H_Rubrique','AA_H_NomCommercial','AA_H_Trans_PC_ClientFinal','AA_H_NomClientFinal'
+        ]
+        available = {c for c in sans_cols}
+        select_parts = [c for c in desired if c in available]
+        if not select_parts:
+            return jsonify({'error': 'No matching columns available for export'}), 400
+
+        sql = text(f"SELECT TOP 10000 {', '.join(select_parts)} FROM [dbo].[View_AA_SansFacture] ORDER BY AA_H_DateProcess DESC")
+        rows = db.session.execute(sql).mappings().all()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        # header using column names
+        writer.writerow(select_parts)
+        for r in rows:
+            writer.writerow([r.get(c) for c in select_parts])
+
+        csv_data = output.getvalue()
+        return Response(csv_data, mimetype='text/csv', headers={
+            'Content-Disposition': 'attachment; filename="aa_sans_facture.csv"'
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
 
 @api_bp.route('/freight/items', methods=['GET'])
 @login_required
