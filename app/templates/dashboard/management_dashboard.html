@@ -1356,9 +1356,9 @@ document.addEventListener('DOMContentLoaded',function(){
           const total_du_mois = Number(freightJson.total_du_mois) || 0;
           const total_year = Number(freightJson.total_year) || 0;
           // invert values: put year total in the main KPI and month total in the year sub-value
-          setKpiValue('generated', total_year.toLocaleString('fr-FR'));
+          setKpiValue('generated', total_year.toLocaleString('fr-FR') + ' TND');
           const yearEl = document.querySelector('[data-kpi-value="generated-year"]');
-          if(yearEl) yearEl.textContent = total_du_mois.toLocaleString('fr-FR');
+          if(yearEl) yearEl.textContent = total_du_mois.toLocaleString('fr-FR') + ' TND';
         }
       }catch(e){ /* ignore */ }
     }catch{
