@@ -1330,6 +1330,14 @@ document.addEventListener('DOMContentLoaded',function(){
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
+        // Replace any title markers '(mois)' with the current month name and year
+        try{
+          const monthNamesFull = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+          document.querySelectorAll('.kpi-card .kpi-title').forEach(el=>{
+            if(!el || !el.textContent) return;
+            el.textContent = el.textContent.replace(/\(mois\)/i, `(${monthNamesFull[curMonth-1]} ${curYear})`);
+          });
+        }catch(e){ /* ignore DOM errors during initialisation */ }
         
         // Compute Timbrage KPI as ONLY (total_soumis + total_non_soumis)
         try {
