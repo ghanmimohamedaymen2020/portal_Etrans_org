@@ -1087,6 +1087,9 @@ def get_ff_list():
         total_set = {c for c in total_cols}
 
         # Build select list mapping to frontend keys
+        # respect optional type filter (Agent invoices don't have 'nom_commercial')
+        req_type = request.args.get('type')
+
         select_parts = [
             'e.FF_H_DateProcess AS date_process',
             'e.FF_H_Dossier AS dossier'
@@ -1107,13 +1110,12 @@ def get_ff_list():
             select_parts.append('e.FF_H_Service AS service')
         else:
             select_parts.append("NULL AS service")
-        # Commercial name if present
-        if 'FF_H_NomCommercial' in entete_set:
-            select_parts.append('e.FF_H_NomCommercial AS nom_commercial')
-        elif 'FF_H_IdCommercial' in entete_set:
-            select_parts.append('e.FF_H_IdCommercial AS nom_commercial')
-        else:
-            select_parts.append("NULL AS nom_commercial")
+        # Commercial name: include only for non-Agent exports (Agent invoices don't have commercial)
+        if not (req_type and str(req_type).upper() == 'A'):
+            if 'FF_H_NomCommercial' in entete_set:
+                select_parts.append('e.FF_H_NomCommercial AS nom_commercial')
+            elif 'FF_H_IdCommercial' in entete_set:
+                select_parts.append('e.FF_H_IdCommercial AS nom_commercial')
 
         # Add FF total columns when available
         if 'FF_T_TotalNonSoumis' in total_set:
@@ -1139,6 +1141,14 @@ def get_ff_list():
             select_parts.append('t.FF_T_TotalTTC AS total_ttc')
         else:
             select_parts.append("NULL AS total_ttc")
+
+        # include a representative currency for the invoice (from details)
+        # For Timbrage/Magasinage/Surestarie invoices the UI/list should show TND
+        if req_type and str(req_type).upper() in ('T', 'M', 'S'):
+            select_parts.append("'TND' AS devise")
+        else:
+            # this ensures exported CSV contains the currency column when not forced to TND
+            select_parts.append("(SELECT TOP 1 FF_D_Devise FROM dbo.View_FF_Detail d WHERE d.FF_D_NumFact = e.FF_H_NumFact) AS devise")
         # If a specific invoice type is requested, prefer the totals view
         # joined to the entete view and filter by FF_H_TypeFacture (matches
         # the SQL you provided for Timbrage/Agent/Magasinage).
@@ -1155,13 +1165,12 @@ def get_ff_list():
                 't.FF_T_House AS house',
                 "COALESCE(e.FF_H_Service, NULL) AS service",
             ]
-            # commercial column: prefer NomCommercial, else IdCommercial, else NULL
-            if 'FF_H_NomCommercial' in entete_set:
-                t_select.append('e.FF_H_NomCommercial AS nom_commercial')
-            elif 'FF_H_IdCommercial' in entete_set:
-                t_select.append('e.FF_H_IdCommercial AS nom_commercial')
-            else:
-                t_select.append("NULL AS nom_commercial")
+            # commercial column: include only for non-Agent exports
+            if not (req_type and str(req_type).upper() == 'A'):
+                if 'FF_H_NomCommercial' in entete_set:
+                    t_select.append('e.FF_H_NomCommercial AS nom_commercial')
+                elif 'FF_H_IdCommercial' in entete_set:
+                    t_select.append('e.FF_H_IdCommercial AS nom_commercial')
             # totals from View_FF_Total when available
             if 'FF_T_TotalNonSoumis' in total_set:
                 t_select.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
@@ -1185,7 +1194,11 @@ def get_ff_list():
             else:
                 t_select.append("NULL AS total_ttc")
             # include a representative currency for the invoice (from details)
-            t_select.append("(SELECT TOP 1 FF_D_Devise FROM dbo.View_FF_Detail d WHERE d.FF_D_NumFact = t.FF_T_NumFact) AS devise")
+            # For Timbrage/Magasinage/Surestarie invoices the UI/list should show TND
+            if req_type and str(req_type).upper() in ('T', 'M', 'S'):
+                t_select.append("'TND' AS devise")
+            else:
+                t_select.append("(SELECT TOP 1 FF_D_Devise FROM dbo.View_FF_Detail d WHERE d.FF_D_NumFact = t.FF_T_NumFact) AS devise")
             sql = text(f"SELECT {', '.join(t_select)} FROM [dbo].[View_FF_Total] t INNER JOIN [dbo].[View_FF_Entete] e ON t.FF_T_NumFact = e.FF_H_NumFact WHERE UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = :type AND MONTH(e.FF_H_DateProcess) = :month AND YEAR(e.FF_H_DateProcess) = :year ORDER BY e.FF_H_DateProcess DESC")
             params['type'] = str(req_type).upper()
             rows = db.session.execute(sql, params).mappings().all()
@@ -1291,24 +1304,51 @@ def export_ff_list_csv():
         else:
             select_parts.append("NULL AS total_ttc")
 
+        # Build WHERE clause with optional type filter (respect existing schema)
+        where_clauses = ["MONTH(e.FF_H_DateProcess) = :month", "YEAR(e.FF_H_DateProcess) = :year"]
+        params = {'month': month, 'year': year}
+        req_type = request.args.get('type')
+        if req_type:
+            # choose available column name for type
+            if 'FF_H_TypeFacture' in entete_set:
+                where_clauses.append("UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = :type")
+            elif 'FF_H_TypeFactRect' in entete_set:
+                where_clauses.append("UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) = :type")
+            # set param uppercased
+            params['type'] = str(req_type).upper()
+
+        where_sql = ' AND '.join(where_clauses)
         sql = text(f"""
             SELECT {', '.join(select_parts)}
             FROM [dbo].[View_FF_Entete] e
             LEFT JOIN [dbo].[View_FF_Total] t
               ON t.FF_T_NumFact = e.FF_H_NumFact
-                        WHERE MONTH(e.FF_H_DateProcess) = :month
-                            AND YEAR(e.FF_H_DateProcess) = :year
-                        ORDER BY e.FF_H_DateProcess DESC
-                """)
+            WHERE {where_sql}
+            ORDER BY e.FF_H_DateProcess DESC
+        """)
 
-        rows = db.session.execute(sql, {'month': month, 'year': year}).mappings().all()
+        rows = db.session.execute(sql, params).mappings().all()
 
         import io, csv
         output = io.StringIO()
+        # prepare a friendly filename using type, month name and year
+        req_type = request.args.get('type')
+        type_label = 'all'
+        if req_type:
+            t = str(req_type).upper()
+            mapping = {'T': 'Timbrage', 'M': 'Magasinage', 'S': 'Surestarie', 'A': 'Agent'}
+            type_label = mapping.get(t, t)
+        month_names = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+        try:
+            month_name = month_names[int(month)-1]
+        except Exception:
+            month_name = str(month)
+        filename_safe = f"factures_{type_label}_{month_name}_{year}.csv".replace(' ', '_')
+
         if not rows:
             csv_data = output.getvalue()
             return Response(csv_data, mimetype='text/csv', headers={
-                'Content-Disposition': f'attachment; filename="factures_{year}_{month}.csv"'
+                'Content-Disposition': f'attachment; filename="{filename_safe}"'
             })
 
         headers = list(rows[0].keys())
@@ -1319,7 +1359,7 @@ def export_ff_list_csv():
 
         csv_data = output.getvalue()
         return Response(csv_data, mimetype='text/csv', headers={
-            'Content-Disposition': f'attachment; filename="factures_{year}_{month}.csv"'
+            'Content-Disposition': f'attachment; filename="{filename_safe}"'
         })
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500

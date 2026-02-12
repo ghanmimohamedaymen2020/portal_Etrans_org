@@ -579,8 +579,8 @@ body.chart-only.show-chart-list .list-section {
 <div class="kpi-section">
   <div class="kpi-card" data-key="generated" style="border-left-color:var(--color-info);">
     <div class="kpi-title">Freight</div>
-    <div class="kpi-sub"><strong>Ce mois</strong> — <span class="kpi-value-inline" data-kpi-value="generated">0</span></div>
-    <div class="kpi-sub" style="font-size:0.85rem;color:#666;margin-top:4px;"><strong>Année:</strong> <span class="kpi-value-inline" data-kpi-value="generated-year">0</span></div>
+    <div class="kpi-sub" style="font-size:0.85rem;color:#000000;"><strong >Ce mois</strong> — <span class="kpi-value-inline" data-kpi-value="generated">0</span></div>
+    <div class="kpi-sub" style="font-size:0.85rem;color:#000000;margin-top:4px;"><strong>Année:</strong> <span class="kpi-value-inline" data-kpi-value="generated-year">0</span></div>
   </div>
   <div class="kpi-card" data-key="not-stamped" style="border-left-color:var(--color-danger);">
     <div class="kpi-title">Avis non timbrés</div>
@@ -599,9 +599,9 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-card" data-key="invoices-agent" style="border-left-color:#6f42c1;">
       <div class="kpi-title">Factures - Agent (mois)</div>
       <div class="kpi-value" data-kpi-value="invoices-agent">0</div>
-    <div class="kpi-sub" style="font-size:0.85rem;color:#666;margin-top:6px;">
-      <strong>EUR:</strong> <span class="kpi-value-inline" data-kpi-value="agent-eur">0</span>
-      &nbsp;&nbsp; <strong>USD:</strong> <span class="kpi-value-inline" data-kpi-value="agent-usd">0</span>
+    <div class="kpi-sub" style="font-size:0.85rem;color:#000000;margin-top:6px;">
+       <span class="kpi-value-inline" data-kpi-value="agent-eur">0</span>
+      &nbsp;&nbsp; <span class="kpi-value-inline" data-kpi-value="agent-usd">0</span>
     </div>
     <!-- invoice count removed per request -->
     </div>
@@ -1188,7 +1188,7 @@ document.addEventListener('DOMContentLoaded',function(){
               if(!resp.ok) throw new Error(data.error||'Erreur API');
               items = data.factures || [];
               // show export button for invoices and bind download
-              if(exportCsvBtn){
+                if(exportCsvBtn){
                 exportCsvBtn.style.display='inline-block';
                 exportCsvBtn.onclick = function(){
                   let url = `/api/factures/ff-list/export?month=${monthFilter}&year=${yearFilter}`;
