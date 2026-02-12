@@ -197,75 +197,75 @@ def get_factures_aa_detail():
         # If the AA view is not available or doesn't contain expected columns,
         # fall back to returning rows from View_FF_Entete + View_FF_Total so the
         # frontend lists (not-stamped / invoices) can still show data based on FF.
-        if not selected_columns:
-            # Inspect FF entete / total columns
-            ff_entete_cols = db.session.execute(text("""
-                SELECT COLUMN_NAME
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo'
-                  AND TABLE_NAME = 'View_FF_Entete'
-            """)).scalars().all()
-            ff_total_cols = db.session.execute(text("""
-                SELECT COLUMN_NAME
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo'
-                  AND TABLE_NAME = 'View_FF_Total'
-            """)).scalars().all()
-            ff_set = {c for c in ff_entete_cols}
-            total_set = {c for c in ff_total_cols}
+        try:
+            # Try unqualified views first
+            total_du_mois = 0.0
+            total_global = 0.0
+            total_year = 0.0
+            count_du_mois = 0
+            count_global = 0
 
-            # Build per-month per-TypeService series using Total_HT (FF_D_MontantHT_TND)
-            sql = text("""
-                SELECT
-                    MONTH(H.FF_H_DateProcess) AS month,
-                    CASE WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
-                         THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
-                         ELSE H.FF_H_TypeFacture END AS TypeService,
-                    SUM(ISNULL(D.FF_D_MontantHT_TND, ISNULL(D.FF_D_MontantTTC,0) - ISNULL(D.FF_D_MontantTVA,0))) AS Total_HT
-                FROM [dbo].[View_FF_Entete] H
-                INNER JOIN [dbo].[View_FF_Detail] D
-                    ON H.FF_H_NumFact = D.FF_D_NumFact
-                WHERE UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) IN ('T','S','A','M')
-                  AND YEAR(H.FF_H_DateProcess) = :year
-                GROUP BY MONTH(H.FF_H_DateProcess),
-                    CASE WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
-                         THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
-                         ELSE H.FF_H_TypeFacture END
-                ORDER BY month, TypeService
-            """)
+            def try_query_sum(view_sql, col_name='s', count=False):
+                try:
+                    if count:
+                        q = db.session.execute(text(view_sql)).mappings().first()
+                        return float(q.get(col_name) or 0), int(q.get('cnt') or 0)
+                    else:
+                        q = db.session.execute(text(view_sql)).mappings().first()
+                        return float(q.get(col_name) or 0), None
+                except Exception:
+                    return None, None
 
-            def build_activity_series(target_year):
-                rows = db.session.execute(sql, {'year': target_year}).mappings().all()
-                categories = {}
-                for r in rows:
-                    m = int(r.get('month') or 0)
-                    if m < 1 or m > 12: continue
-                    ts = (r.get('TypeService') or '').strip()
-                    amt = float(r.get('Total_HT') or 0)
-                    if ts not in categories:
-                        categories[ts] = [0.0]*12
-                    categories[ts][m-1] += amt
-                return categories
+            # prefer month total from View_FREIGHT_TND_DuMois using MontantTTC
+            s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND_DuMois]", count=True)
+            if s is None:
+                # try fully qualified DB name (some installations use Dashboard.dbo)
+                s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [Dashboard].[dbo].[View_FREIGHT_TND_DuMois]", count=True)
+            if s is not None:
+                total_du_mois = s
+                count_du_mois = c or 0
 
-            debug = request.args.get('debug')
-            cur = build_activity_series(year)
-            prev = build_activity_series(year-1)
-            result = {'year': year, 'current': cur, 'previous': prev}
-            if debug:
-                rows_cur = db.session.execute(sql, {'year': year}).mappings().all()
-                def simplify(rows):
-                    out=[]
-                    for r in rows:
-                        row={}
-                        for k,v in r.items():
-                            try:
-                                row[k]=float(v) if v is not None else None
-                            except Exception:
-                                row[k]=str(v) if v is not None else None
-                        out.append(row)
-                    return out
-                result['debug_rows_current']=simplify(rows_cur)
-            return jsonify(result)
+            # global totals using FF_D_MontantTTC (use TTC for yearly/global sums too)
+            s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND]", count=True)
+            if s is None:
+                s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [Dashboard].[dbo].[View_FREIGHT_TND]", count=True)
+            if s is not None:
+                total_global = s
+                count_global = c or 0
+                if year:
+                    # try yearly sum from the global view using MontantTTC
+                    try:
+                        r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s FROM [dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year}).mappings().first()
+                        if r3 and r3.get('s') is not None:
+                            total_year = float(r3.get('s') or 0)
+                    except Exception:
+                        try:
+                            r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year}).mappings().first()
+                            if r3 and r3.get('s') is not None:
+                                total_year = float(r3.get('s') or 0)
+                        except Exception:
+                            total_year = 0.0
+
+            out = {'total_du_mois': total_du_mois, 'total_global': total_global, 'total_year': total_year,
+                   'count_du_mois': count_du_mois, 'count_global': count_global}
+            if request.args.get('debug'):
+                samples = {}
+                if count_du_mois>0:
+                    rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                    if not rows_sample:
+                        rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [Dashboard].[dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                    samples['du_mois'] = [dict(r) for r in rows_sample]
+                if count_global>0:
+                    rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                    if not rows_sample:
+                        rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [Dashboard].[dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                    samples['global'] = [dict(r) for r in rows_sample]
+                out['samples'] = samples
+                return jsonify(out)
+        except Exception as exc:
+            # If anything fails while computing FF-based fallback totals, ignore
+            # and continue with the AA-based logic below (or return empty rows).
+            pass
 
         order_by = 'AA_H_DateProcess' if 'AA_H_DateProcess' in column_set else selected_columns[0]
 
@@ -1288,18 +1288,47 @@ def get_freight_summary():
 
         total_du_mois = 0.0
         total_global = 0.0
+        total_year = 0.0
+        count_du_mois = 0
+        count_global = 0
+
+        # optional year filter for yearly total
+        year = request.args.get('year', type=int)
 
         if 'View_FREIGHT_TND_DuMois' in view_set:
-            r = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [dbo].[View_FREIGHT_TND_DuMois]"))
+            # For current-month total use FF_D_MontantTTC per request
+            r = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND_DuMois]"))
             row = r.mappings().first()
             total_du_mois = float(row.get('s') or 0)
+            count_du_mois = int(row.get('cnt') or 0)
 
         if 'View_FREIGHT_TND' in view_set:
-            r2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [dbo].[View_FREIGHT_TND]"))
+            r2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND]"))
             row2 = r2.mappings().first()
             total_global = float(row2.get('s') or 0)
+            count_global = int(row2.get('cnt') or 0)
+            if year:
+                # compute yearly total from full view by year
+                r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year})
+                row3 = r3.mappings().first()
+                total_year = float(row3.get('s') or 0)
+                # override count for yearly if needed
+                # year_count = int(row3.get('cnt') or 0)
 
-        return jsonify({'total_du_mois': total_du_mois, 'total_global': total_global})
+        # include counts; when debug=1, include a small sample of rows from each view
+        out = {'total_du_mois': total_du_mois, 'total_global': total_global, 'total_year': total_year,
+               'count_du_mois': count_du_mois, 'count_global': count_global}
+        if request.args.get('debug'):
+            samples = {}
+            if 'View_FREIGHT_TND_DuMois' in view_set and count_du_mois>0:
+                # sample month rows including MontantTTC (used for month total)
+                rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                samples['du_mois'] = [dict(r) for r in rows_sample]
+            if 'View_FREIGHT_TND' in view_set and count_global>0:
+                rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantHT_TND FROM [dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                samples['global'] = [dict(r) for r in rows_sample]
+            out['samples'] = samples
+        return jsonify(out)
     except Exception as exc:
         return jsonify({'error': str(exc), 'total_du_mois': 0, 'total_global': 0}), 500
 

@@ -148,6 +148,15 @@ body.list-only main {
   color: #777;
 }
 
+/* inline KPI numbers used inside kpi-sub (smaller than main .kpi-value but enlarged) */
+.kpi-value-inline {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .list-section {
   display: none;
   background: #fff;
@@ -568,9 +577,9 @@ body.chart-only.show-chart-list .list-section {
 
 <div class="kpi-section">
   <div class="kpi-card" data-key="generated" style="border-left-color:var(--color-info);">
-    <div class="kpi-title">Total marge sur fret</div>
-    <div class="kpi-value">420</div>
-    <div class="kpi-sub">Ce mois</div>
+    <div class="kpi-title">Total marge</div>
+    <div class="kpi-sub"><strong>Ce mois</strong> — <span class="kpi-value-inline" data-kpi-value="generated">0</span></div>
+    <div class="kpi-sub" style="font-size:0.85rem;color:#666;margin-top:4px;"><strong>Année:</strong> <span class="kpi-value-inline" data-kpi-value="generated-year">0</span></div>
   </div>
   <div class="kpi-card" data-key="not-stamped" style="border-left-color:var(--color-danger);">
     <div class="kpi-title">Avis non timbrés</div>
@@ -1337,6 +1346,21 @@ document.addEventListener('DOMContentLoaded',function(){
         // Fallback to zero on error
         setKpiValue('invoices', 0);
       }
+      // Get freight summary totals and update 'generated' KPI (month + year)
+      try{
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const freightResp = await fetch(`/api/freight/summary?year=${curYear}`);
+        if(freightResp.ok){
+          const freightJson = await freightResp.json();
+          const total_du_mois = Number(freightJson.total_du_mois) || 0;
+          const total_year = Number(freightJson.total_year) || 0;
+          // invert values: put year total in the main KPI and month total in the year sub-value
+          setKpiValue('generated', total_year.toLocaleString('fr-FR'));
+          const yearEl = document.querySelector('[data-kpi-value="generated-year"]');
+          if(yearEl) yearEl.textContent = total_du_mois.toLocaleString('fr-FR');
+        }
+      }catch(e){ /* ignore */ }
     }catch{
       setKpiValue('not-stamped',0);
       setKpiValue('invoices',0);
