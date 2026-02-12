@@ -796,6 +796,60 @@ def get_ca_activite_total():
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
+
+@api_bp.route('/factures/agent-totals', methods=['GET'])
+@login_required
+def get_agent_totals():
+    """Retourne la somme TTC par devise (EUR, USD) pour les factures Agent.
+    Params: year (opt), month (opt). Par défaut mois/année courants.
+    """
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    if month is None or year is None:
+        from datetime import datetime
+        now = datetime.utcnow()
+        if month is None:
+            month = now.month
+        if year is None:
+            year = now.year
+
+    try:
+        # protective check for required views/columns
+        detail_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_FF_Detail'
+        """)).scalars().all()
+        entete_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_FF_Entete'
+        """)).scalars().all()
+        if not {'FF_D_Devise','FF_D_MontantTTC','FF_D_NumFact'}.issubset({c for c in detail_cols}):
+            return jsonify({'error':'Colonnes manquantes dans View_FF_Detail','missing': list(set(['FF_D_Devise','FF_D_MontantTTC','FF_D_NumFact']) - set(detail_cols))}), 500
+        if 'FF_H_TypeFacture' not in entete_cols or 'FF_H_NumFact' not in entete_cols or 'FF_H_DateProcess' not in entete_cols:
+            return jsonify({'error':'Colonnes manquantes dans View_FF_Entete','missing': []}), 500
+
+        sql = text("""
+            SELECT d.FF_D_Devise AS devise,
+                   SUM(ISNULL(d.FF_D_MontantTTC,0)) AS total_ttc
+            FROM [dbo].[View_FF_Entete] h
+            INNER JOIN [dbo].[View_FF_Detail] d ON h.FF_H_NumFact = d.FF_D_NumFact
+            WHERE UPPER(LTRIM(RTRIM(h.FF_H_TypeFacture))) = 'A'
+              AND YEAR(h.FF_H_DateProcess) = :year
+              AND MONTH(h.FF_H_DateProcess) = :month
+              AND d.FF_D_Devise IN ('EUR','USD')
+            GROUP BY d.FF_D_Devise
+            ORDER BY d.FF_D_Devise
+        """)
+
+        rows = db.session.execute(sql, {'year': year, 'month': month}).mappings().all()
+        result = {r.get('devise'): float(r.get('total_ttc') or 0) for r in rows}
+        # ensure keys exist
+        for cur in ('EUR','USD'):
+            result.setdefault(cur, 0.0)
+        return jsonify({'year': year, 'month': month, 'totals': result})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
 @api_bp.route('/factures/ff-monthly', methods=['GET'])
 @login_required
 def get_ff_monthly_totals():

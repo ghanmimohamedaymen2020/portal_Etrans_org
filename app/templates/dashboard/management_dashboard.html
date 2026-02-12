@@ -120,6 +120,7 @@ body.list-only main {
   transition: var(--transition);
   cursor: pointer;
   user-select: none;
+  position: relative;
 }
 
 .kpi-card:hover {
@@ -598,6 +599,11 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-card" data-key="invoices-agent" style="border-left-color:#6f42c1;">
       <div class="kpi-title">Factures - Agent (mois)</div>
       <div class="kpi-value" data-kpi-value="invoices-agent">0</div>
+    <div class="kpi-sub" style="font-size:0.85rem;color:#666;margin-top:6px;">
+      <strong>EUR:</strong> <span class="kpi-value-inline" data-kpi-value="agent-eur">0</span>
+      &nbsp;&nbsp; <strong>USD:</strong> <span class="kpi-value-inline" data-kpi-value="agent-usd">0</span>
+    </div>
+    <!-- invoice count removed per request -->
     </div>
     <div class="kpi-card" data-key="invoices-surestarie" style="border-left-color:#20c997;">
       <div class="kpi-title">Factures - Surestarie (mois)</div>
@@ -1372,13 +1378,29 @@ document.addEventListener('DOMContentLoaded',function(){
           }
         }
 
-        // KPI Agent - COUNT (pas THT car pas de THT pour Agent)
+        // Update Agent KPI title to current month (remove invoice count display)
         try{
-          const agentResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=A`);
-          const agentJson = await agentResp.json();
-          setKpiValue('invoices-agent', (agentJson.count || 0) + ' facture(s)');
-        }catch(e){ 
-          setKpiValue('invoices-agent', '0 facture(s)'); 
+          const monthNamesFull = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+          const agentTitleEl = document.querySelector('.kpi-card[data-key="invoices-agent"] .kpi-title');
+          if(agentTitleEl) agentTitleEl.textContent = `Factures - Agent (${monthNamesFull[curMonth-1]} ${curYear})`;
+          const agentMainVal = document.querySelector('[data-kpi-value="invoices-agent"]');
+          if(agentMainVal) agentMainVal.textContent = '';
+        }catch(e){ /* ignore */ }
+        // Récupérer totaux Agent par devise (EUR, USD) et afficher
+        try{
+          const atResp = await fetch(`/api/factures/agent-totals?month=${curMonth}&year=${curYear}`);
+          if(atResp.ok){
+            const atJson = await atResp.json();
+            const totals = atJson.totals || {};
+            const eur = Number(totals.EUR || 0);
+            const usd = Number(totals.USD || 0);
+            const eurEl = document.querySelector('[data-kpi-value="agent-eur"]');
+            const usdEl = document.querySelector('[data-kpi-value="agent-usd"]');
+            if(eurEl) eurEl.textContent = formatAmount(eur) + ' EUR';
+            if(usdEl) usdEl.textContent = formatAmount(usd) + ' USD';
+          }
+        }catch(e){
+          // ignore
         }
         
         // ============================================
