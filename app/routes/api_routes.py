@@ -163,6 +163,34 @@ def get_factures_aa_detail():
         """)).scalars().all()
         column_set = {c for c in columns}
 
+        # If View_AA_SansFacture exists, prefer returning its top 1000 rows
+        sans_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_SansFacture'
+        """)).scalars().all()
+        if sans_cols:
+            # select exactly the columns requested by the user
+            select_list = [
+                'AA_H_Reference','AA_H_DateProcess','AA_H_Dossier','AA_H_NomClient',
+                'AA_H_Adresse_1','AA_H_Adresse_2','AA_H_Adresse_3','AA_H_TVA',
+                'AA_H_DateSuspTVA_Du','AA_H_DateSuspTVA_Au','AA_H_IdBar','AA_H_Voyage',
+                'AA_H_Navire','AA_H_PPOL','AA_H_POL','AA_H_DPOL','AA_H_PPOD','AA_H_POD',
+                'AA_H_DPOD','AA_H_ETA','AA_H_Traduccion','AA_H_House','AA_H_MasterBL',
+                'AA_H_Service','AA_H_Escale','AA_H_Rubrique','AA_H_IdCommercial',
+                'AA_H_NomCommercial','AA_H_EmailCommercial','AA_H_IdUtilisateur',
+                'AA_H_EmailUtilisateur','AA_H_Trans_PC_ClientFinal','AA_H_NomClientFinal',
+                'AA_H_NumSuspTVA','AA_H_NumFacture'
+            ]
+            # ensure columns exist in the view
+            available = {c for c in sans_cols}
+            select_parts = [c for c in select_list if c in available]
+            if select_parts:
+                sql = text(f"SELECT TOP 1000 {', '.join(select_parts)} FROM [dbo].[View_AA_SansFacture] ORDER BY AA_H_DateProcess DESC")
+                rows = db.session.execute(sql).mappings().all()
+                factures = [dict(r) for r in rows]
+                return jsonify({'factures': factures, 'total': len(factures)})
+
         selected_columns = [c for c in desired_columns if c in column_set]
         # If the AA view is not available or doesn't contain expected columns,
         # fall back to returning rows from View_FF_Entete + View_FF_Total so the
@@ -184,71 +212,58 @@ def get_factures_aa_detail():
             ff_set = {c for c in ff_entete_cols}
             total_set = {c for c in ff_total_cols}
 
-            ff_select = [
-                'e.FF_H_NumFact AS AA_H_Reference',
-                'e.FF_H_DateProcess AS AA_H_DateProcess',
-                'e.FF_H_Dossier AS AA_H_Dossier'
-            ]
-            if 'FF_H_NomClient' in ff_set:
-                ff_select.append('e.FF_H_NomClient AS AA_H_NomClient')
-            else:
-                ff_select.append("NULL AS AA_H_NomClient")
-            if 'FF_H_ETA' in ff_set:
-                ff_select.append('e.FF_H_ETA AS AA_H_ETA')
-            else:
-                ff_select.append("NULL AS AA_H_ETA")
-            if 'FF_H_House' in ff_set:
-                ff_select.append('e.FF_H_House AS AA_H_House')
-            else:
-                ff_select.append("NULL AS AA_H_House")
-            if 'FF_H_Service' in ff_set:
-                ff_select.append('e.FF_H_Service AS AA_H_Service')
-            else:
-                ff_select.append("NULL AS AA_H_Service")
-            if 'FF_H_IdCommercial' in ff_set:
-                ff_select.append('e.FF_H_IdCommercial AS AA_H_IdCommercial')
-            elif 'FF_H_NomCommercial' in ff_set:
-                ff_select.append('e.FF_H_NomCommercial AS AA_H_NomCommercial')
-            else:
-                ff_select.append("NULL AS AA_H_IdCommercial")
+            # Build per-month per-TypeService series using Total_HT (FF_D_MontantHT_TND)
+            sql = text("""
+                SELECT
+                    MONTH(H.FF_H_DateProcess) AS month,
+                    CASE WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
+                         THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
+                         ELSE H.FF_H_TypeFacture END AS TypeService,
+                    SUM(ISNULL(D.FF_D_MontantHT_TND, ISNULL(D.FF_D_MontantTTC,0) - ISNULL(D.FF_D_MontantTVA,0))) AS Total_HT
+                FROM [dbo].[View_FF_Entete] H
+                INNER JOIN [dbo].[View_FF_Detail] D
+                    ON H.FF_H_NumFact = D.FF_D_NumFact
+                WHERE UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) IN ('T','S','A','M')
+                  AND YEAR(H.FF_H_DateProcess) = :year
+                GROUP BY MONTH(H.FF_H_DateProcess),
+                    CASE WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
+                         THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
+                         ELSE H.FF_H_TypeFacture END
+                ORDER BY month, TypeService
+            """)
 
-            # include ff totals when available
-            if 'FF_T_TotalTTC' in total_set:
-                ff_select.append('t.FF_T_TotalTTC AS total_ttc')
-            else:
-                ff_select.append("NULL AS total_ttc")
-            if 'FF_T_TotalNonSoumis' in total_set:
-                ff_select.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
-            else:
-                ff_select.append("NULL AS ff_total_non_soumis")
-            if 'FF_T_TotalSoumis' in total_set:
-                ff_select.append('t.FF_T_TotalSoumis AS ff_total_soumis')
-            else:
-                ff_select.append("NULL AS ff_total_soumis")
-            if 'FF_T_TotalTVA' in total_set:
-                ff_select.append('t.FF_T_TotalTVA AS ff_total_tva')
-            else:
-                ff_select.append("NULL AS ff_total_tva")
+            def build_activity_series(target_year):
+                rows = db.session.execute(sql, {'year': target_year}).mappings().all()
+                categories = {}
+                for r in rows:
+                    m = int(r.get('month') or 0)
+                    if m < 1 or m > 12: continue
+                    ts = (r.get('TypeService') or '').strip()
+                    amt = float(r.get('Total_HT') or 0)
+                    if ts not in categories:
+                        categories[ts] = [0.0]*12
+                    categories[ts][m-1] += amt
+                return categories
 
-            fallback_sql = text(f"SELECT {', '.join(ff_select)} FROM [dbo].[View_FF_Entete] e LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact ORDER BY e.FF_H_DateProcess DESC")
-            rows = db.session.execute(fallback_sql).mappings().all()
-            factures = []
-            for row in rows:
-                factures.append({
-                    'AA_H_Reference': row.get('AA_H_Reference'),
-                    'AA_H_DateProcess': row.get('AA_H_DateProcess'),
-                    'AA_H_Dossier': row.get('AA_H_Dossier'),
-                    'AA_H_NomClient': row.get('AA_H_NomClient'),
-                    'AA_H_ETA': row.get('AA_H_ETA'),
-                    'AA_H_House': row.get('AA_H_House'),
-                    'AA_H_Service': row.get('AA_H_Service'),
-                    'AA_H_IdCommercial': row.get('AA_H_IdCommercial') or row.get('AA_H_NomCommercial'),
-                    'total_ttc': row.get('total_ttc'),
-                    'ff_total_non_soumis': row.get('ff_total_non_soumis'),
-                    'ff_total_soumis': row.get('ff_total_soumis'),
-                    'ff_total_tva': row.get('ff_total_tva')
-                })
-            return jsonify({'factures': factures, 'total': len(factures)})
+            debug = request.args.get('debug')
+            cur = build_activity_series(year)
+            prev = build_activity_series(year-1)
+            result = {'year': year, 'current': cur, 'previous': prev}
+            if debug:
+                rows_cur = db.session.execute(sql, {'year': year}).mappings().all()
+                def simplify(rows):
+                    out=[]
+                    for r in rows:
+                        row={}
+                        for k,v in r.items():
+                            try:
+                                row[k]=float(v) if v is not None else None
+                            except Exception:
+                                row[k]=str(v) if v is not None else None
+                        out.append(row)
+                    return out
+                result['debug_rows_current']=simplify(rows_cur)
+            return jsonify(result)
 
         order_by = 'AA_H_DateProcess' if 'AA_H_DateProcess' in column_set else selected_columns[0]
 
@@ -468,7 +483,8 @@ def get_ca_par_activite():
 
     # required columns to compute provided SQL
     required_entete = {'FF_H_TypeFacture', 'FF_H_NumFact', 'FF_H_DateProcess'}
-    required_detail = {'FF_D_NumFact', 'FF_D_Devise', 'FF_D_MontantHT_TND', 'FF_D_Montant', 'FF_D_MontantTVA', 'FF_D_MontantTTC'}
+    # FF_D_MontantHT_TND may be missing; we'll fall back to (TotalTTC - TotalTVA)
+    required_detail = {'FF_D_NumFact', 'FF_D_Devise', 'FF_D_Montant', 'FF_D_MontantTVA', 'FF_D_MontantTTC'}
 
     try:
         entete_cols = db.session.execute(text("""
@@ -498,7 +514,7 @@ def get_ca_par_activite():
                         THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
                     ELSE H.FF_H_TypeFacture
                 END AS TypeService,
-                SUM(ISNULL(D.FF_D_MontantHT_TND,0)) AS Total_HT,
+                    SUM(ISNULL(D.FF_D_MontantHT_TND, ISNULL(D.FF_D_MontantTTC,0) - ISNULL(D.FF_D_MontantTVA,0))) AS Total_HT,
                 SUM(ISNULL(D.FF_D_Montant,0)) AS Total_Soumis,
                 SUM(ISNULL(D.FF_D_MontantTVA,0)) AS Total_TVA,
                 SUM(ISNULL(D.FF_D_MontantTTC,0)) AS Total_TTC
@@ -704,11 +720,38 @@ def get_ff_monthly_activity_totals():
                 'surestarie': get_list('surestarie')
             }
 
-        return jsonify({
+        debug = request.args.get('debug')
+        result = {
             'year': year,
             'current': build_activity_series(year),
             'previous': build_activity_series(year - 1)
-        })
+        }
+        if debug:
+            # include raw rows for debugging (requires authenticated session)
+            rows_cur = db.session.execute(sql, {'year': year}).mappings().all()
+            rows_prev = db.session.execute(sql, {'year': year - 1}).mappings().all()
+            # convert Decimal/Date types to strings/numbers for JSON
+            def simplify(rows):
+                out = []
+                for r in rows:
+                    row = {}
+                    for k,v in r.items():
+                        try:
+                            # try to convert to float if numeric
+                            if v is None:
+                                row[k]=None
+                            else:
+                                row[k]=float(v)
+                        except Exception:
+                            try:
+                                row[k]=str(v)
+                            except Exception:
+                                row[k]=None
+                    out.append(row)
+                return out
+            result['debug_rows_current'] = simplify(rows_cur)
+            result['debug_rows_previous'] = simplify(rows_prev)
+        return jsonify(result)
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
@@ -828,6 +871,8 @@ def get_ff_list():
                 t_select.append('t.FF_T_TotalTTC AS total_ttc')
             else:
                 t_select.append("NULL AS total_ttc")
+            # include a representative currency for the invoice (from details)
+            t_select.append("(SELECT TOP 1 FF_D_Devise FROM dbo.View_FF_Detail d WHERE d.FF_D_NumFact = t.FF_T_NumFact) AS devise")
             sql = text(f"SELECT {', '.join(t_select)} FROM [dbo].[View_FF_Total] t INNER JOIN [dbo].[View_FF_Entete] e ON t.FF_T_NumFact = e.FF_H_NumFact WHERE UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = :type AND MONTH(e.FF_H_DateProcess) = :month AND YEAR(e.FF_H_DateProcess) = :year ORDER BY e.FF_H_DateProcess DESC")
             params['type'] = str(req_type).upper()
             rows = db.session.execute(sql, params).mappings().all()
@@ -844,7 +889,8 @@ def get_ff_list():
                     'ff_total_non_soumis': row.get('ff_total_non_soumis'),
                     'ff_total_soumis': row.get('ff_total_soumis'),
                     'ff_total_tva': row.get('ff_total_tva'),
-                    'total_ttc': row.get('total_ttc')
+                    'total_ttc': row.get('total_ttc'),
+                    'devise': row.get('devise')
                 }
                 for row in rows
             ]

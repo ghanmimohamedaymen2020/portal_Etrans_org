@@ -867,7 +867,7 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'reference',label:'Numéro avis'},
       {key:'date_process',label:'Date Process'},
       {key:'dossier',label:'Dossier'},
-      {key:'nom_client',label:'Client'},
+      {key:'nom_client',label:'Agent'},
       {key:'eta',label:'ETA'},
       {key:'house',label:'House'},
       {key:'service',label:'Service'},
@@ -875,7 +875,25 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'ff_total_non_soumis',label:'Total Non Soumis'},
       {key:'ff_total_soumis',label:'Total Soumis'},
       {key:'ff_total_tva',label:'Total TVA'},
-      {key:'total_ttc',label:'Total TTC'}
+      {key:'total_ttc',label:'Total TTC'},
+      {key:'devise',label:'Devise'}
+    ],
+    aaSansFacture:[
+      {key:'AA_H_Dossier',label:'Dossier'},
+      {key:'AA_H_NomClient',label:'Client'},
+      {key:'AA_H_TVA',label:'TVA'},
+      {key:'AA_H_Voyage',label:'Voyage'},
+      {key:'AA_H_Navire',label:'Navire'},
+      {key:'AA_H_ETA',label:'ETA'},
+      {key:'AA_H_Traduccion',label:'Traduction'},
+      {key:'AA_H_House',label:'House'},
+      {key:'AA_H_MasterBL',label:'MasterBL'},
+      {key:'AA_H_Service',label:'Service'},
+      {key:'AA_H_Escale',label:'Escale'},
+      {key:'AA_H_Rubrique',label:'Rubrique'},
+      {key:'AA_H_NomCommercial',label:'Nom Commercial'},
+      {key:'AA_H_Trans_PC_ClientFinal',label:'Client Final'},
+      {key:'AA_H_NomClientFinal',label:'Nom Client Final'}
     ],
     default:[
       {key:'reference',label:'Numéro avis'},
@@ -897,7 +915,7 @@ document.addEventListener('DOMContentLoaded',function(){
     'not-stamped':{
       title:'Avis non timbrés',
       statusClass:'status-danger',
-      columns:columnSets.invoices,
+      columns:columnSets.aaSansFacture,
       items:[]
     },
     'not-withdrawn':{
@@ -1269,10 +1287,18 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function initKpiCounts(){
     try{
-      // Get total invoices (not-stamped KPI)
-      const totalResp = await fetch('/api/factures/count');
-      const totalJson = await totalResp.json();
-      setKpiValue('not-stamped', totalJson.count || 0);
+      // Get total not-stamped rows from AA view when available (preferred)
+      try{
+        const aaResp = await fetch('/api/factures/aa-detail?limit=0');
+        const aaJson = await aaResp.json();
+        const aaCount = (aaJson && aaJson.factures && aaJson.factures.length) || aaJson.total || 0;
+        setKpiValue('not-stamped', aaCount);
+      }catch(e){
+        // fallback to FF-based count endpoint
+        const totalResp = await fetch('/api/factures/count');
+        const totalJson = await totalResp.json();
+        setKpiValue('not-stamped', totalJson.count || 0);
+      }
 
       // Get current month invoice count for the 'invoices' KPI
       try{
@@ -1349,11 +1375,11 @@ document.addEventListener('DOMContentLoaded',function(){
       tr.innerHTML=columns.map(col=>{
         let value=item[col.key]??'';
         // format dates
-        if(col.key.includes('date')||col.key==='eta'){
+        if(col.key && (col.key.toLowerCase().includes('date') || col.key.toLowerCase().includes('eta'))){
           value=formatDateValue(value);
         } else {
           // Avoid formatting certain string columns (house, dossier, reference, names)
-          const noNumericFormat = new Set(['house','dossier','reference','nom_client','nom_commercial','eta','service']);
+          const noNumericFormat = new Set(['house','dossier','reference','nom_client','nom_commercial','eta','service','AA_H_House','AA_H_Dossier','AA_H_Reference','AA_H_NomClient','AA_H_NomCommercial','AA_H_MasterBL','AA_H_Escale','AA_H_Rubrique']);
           // For numeric-looking columns, format with formatAmount (3 decimals)
           const asNum = (value!==null && value!==undefined && value!=='' ) ? Number(value) : NaN;
           if(!Number.isNaN(asNum) && typeof value !== 'object' && !col.key.toLowerCase().includes('id') && !col.key.toLowerCase().includes('reference') && !noNumericFormat.has(col.key)){
@@ -1441,17 +1467,22 @@ document.addEventListener('DOMContentLoaded',function(){
       // stacked view with activities
       barChart.options.scales.x.stacked = true;
       barChart.options.scales.y.stacked = true;
+      const agentSeries = (datasets.agent_currencies && datasets.agent_currencies.length)? datasets.agent_currencies : [datasets.agent];
       newDatasets = [
         Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.timbrage),
         Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.magasinage),
-        Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.agent),
+        ...agentSeries.map(s=>Object.assign({type:'bar', stack:'s1', borderWidth:1}, s)),
         Object.assign({type:'bar', stack:'s1', borderWidth:1}, datasets.surestarie)
       ];
     }else{
       barChart.options.scales.x.stacked = false;
       barChart.options.scales.y.stacked = false;
-      const entry = datasets[sel] || datasets.total;
-      newDatasets = [Object.assign({type:'bar', borderWidth:1}, entry)];
+      if(sel === 'agent' && datasets.agent_currencies && datasets.agent_currencies.length){
+        newDatasets = datasets.agent_currencies.map(s=> Object.assign({type:'bar', borderWidth:1}, s));
+      } else {
+        const entry = datasets[sel] || datasets.total;
+        newDatasets = [Object.assign({type:'bar', borderWidth:1}, entry)];
+      }
     }
     barChart.data.datasets = newDatasets;
     barChart.update();
@@ -1655,39 +1686,84 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function loadMonthlyTurnover(){
     try{
-      const response=await fetch('/api/factures/ff-monthly');
+      const response=await fetch('/api/factures/ff-monthly-activity');
       const data=await response.json();
       if(!response.ok){
         throw new Error(data.error||'Erreur API');
       }
-      // use activities if present (detailed series)
-      const activities = data.activities && data.activities.current ? data.activities.current : null;
-      const totals = Array.isArray(data.current) ? data.current : null;
+      const categories = data.categories || data.current || (data.activities&&data.activities.current) || {};
 
-      // Helper: ensure we always have 12 monthly values (Jan..Dec) filling missing with 0
+      // Robust conversion to numeric month values (handles numbers, strings, or objects {source, parsedValue})
+      function toNumber(val){
+        if(val===null||typeof val==='undefined') return 0;
+        if(typeof val === 'number') return val;
+        if(typeof val === 'string'){
+          const n = Number(val.replace(/[^0-9\,\.\-]/g,'').replace(/,/g,'.'));
+          return Number.isFinite(n)?n:0;
+        }
+        if(typeof val === 'object'){
+          if('parsedValue' in val) return Number(val.parsedValue)||0;
+          if('source' in val) return Number(String(val.source).replace(/,/g,'.'))||0;
+          try{ const n = Number(val); return Number.isFinite(n)?n:0; }catch(e){ return 0; }
+        }
+        const n = Number(val);
+        return Number.isFinite(n)?n:0;
+      }
+
+      // Ensure arrays of length 12
       function ensureMonthlyArray(arr){
         const out = new Array(12).fill(0);
         if(!Array.isArray(arr)) return out;
-        for(let i=0;i<Math.min(arr.length,12);i++){
-          out[i] = Number(arr[i]) || 0;
-        }
+        for(let i=0;i<12;i++) out[i] = toNumber(arr[i]);
         return out;
       }
 
-      if(activities){
-        datasets.timbrage.data = ensureMonthlyArray(activities.timbrage);
-        datasets.magasinage.data = ensureMonthlyArray(activities.magasinage);
-        datasets.agent.data = ensureMonthlyArray(activities.agent);
-        datasets.surestarie.data = ensureMonthlyArray(activities.surestarie);
-      } else {
-        // if no activities block returned, keep arrays but ensure they're zeros
-        datasets.timbrage.data = ensureMonthlyArray(null);
-        datasets.magasinage.data = ensureMonthlyArray(null);
-        datasets.agent.data = ensureMonthlyArray(null);
-        datasets.surestarie.data = ensureMonthlyArray(null);
-      }
+      // Reset primary series
+      datasets.timbrage.data = new Array(12).fill(0);
+      datasets.magasinage.data = new Array(12).fill(0);
+      datasets.surestarie.data = new Array(12).fill(0);
+      datasets.agent_currencies = [];
 
-      datasets.total.data = ensureMonthlyArray(totals);
+      const palette = ['#3498db','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#34495e','#e67e22'];
+      let colorIndex = 0;
+
+      // Populate category series and collect agent currency series
+      Object.keys(categories).forEach(key=>{
+        const arr = ensureMonthlyArray(categories[key]);
+        const first = (key||'').toString().trim().charAt(0).toUpperCase();
+        if(first === 'T'){
+          datasets.timbrage.data = arr;
+        } else if(first === 'M'){
+          datasets.magasinage.data = arr;
+        } else if(first === 'S'){
+          datasets.surestarie.data = arr;
+        } else if(first === 'A'){
+          // Agent per-currency, label like 'A - USD' -> present as 'Agent - USD'
+          const parts = key.split('-').map(s=>s.trim());
+          const currency = parts.length>1?parts[1].toUpperCase():'TND';
+          const label = `Agent - ${currency}`;
+          datasets.agent_currencies.push({
+            label: label,
+            data: arr,
+            backgroundColor: palette[(colorIndex++)%palette.length]
+          });
+        } else {
+          // unknown category: append as custom dataset
+          datasets.agent_currencies.push({
+            label: key,
+            data: arr,
+            backgroundColor: palette[(colorIndex++)%palette.length]
+          });
+        }
+      });
+
+      // Compute total as sum across all categories per month
+      const totals = new Array(12).fill(0);
+      Object.keys(categories).forEach(k=>{
+        const a = ensureMonthlyArray(categories[k]);
+        for(let i=0;i<12;i++) totals[i] += Number(a[i]||0);
+      });
+      datasets.total.data = totals;
 
       // apply currently selected mode
       applyCAMode(document.getElementById('ca-mode-select').value);
@@ -1802,7 +1878,7 @@ document.addEventListener('DOMContentLoaded',function(){
         const raw = (r.type_service||'').toString().trim();
         if(!raw) return;
         const first = raw[0].toUpperCase();
-        const val = Number(r.total_ttc)||0;
+        const val = Number(r.total_ht)||0;
         if(first === 'A'){
           // keep agent entries per currency (e.g. 'A - EUR')
           const label = raw; // preserve original 'A - EUR' format
@@ -1829,13 +1905,14 @@ document.addEventListener('DOMContentLoaded',function(){
         const raw = (r.type_service||'').toString().trim();
         if(!raw) return;
         const parts = raw.split('-').map(s=>s.trim());
+        const amount = Number(r.total_ht)||0;
         if(parts.length>1){
           // agent with currency like 'A - USD'
           const cur = parts[1].toUpperCase();
-          totalsByCurrency[cur] = (totalsByCurrency[cur]||0) + (Number(r.total_ttc)||0);
+          totalsByCurrency[cur] = (totalsByCurrency[cur]||0) + amount;
         } else {
           // non-agent assumed TND
-          totalsByCurrency['TND'] = (totalsByCurrency['TND']||0) + (Number(r.total_ttc)||0);
+          totalsByCurrency['TND'] = (totalsByCurrency['TND']||0) + amount;
         }
       });
 
