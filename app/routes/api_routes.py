@@ -1143,6 +1143,9 @@ def get_freight_items():
         """)).scalars().all()
         col_set = {c for c in cols}
 
+
+
+
         if not required_cols.issubset(col_set):
             return jsonify({
                 'error': "Colonnes manquantes dans View_FREIGHT",
@@ -1265,6 +1268,40 @@ def export_freight_items_csv():
         })
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/freight/summary', methods=['GET'])
+@login_required
+def get_freight_summary():
+    """Retourne les totaux marge sur fret:
+    - total_du_mois: somme(FF_D_MontantHT_TND) depuis View_FREIGHT_TND_DuMois
+    - total_global: somme(FF_D_MontantHT_TND) depuis View_FREIGHT_TND
+    """
+    try:
+        # check available views
+        views = db.session.execute(text("""
+            SELECT TABLE_NAME
+            FROM INFORMATION_SCHEMA.VIEWS
+            WHERE TABLE_SCHEMA = 'dbo'
+        """)).scalars().all()
+        view_set = {v for v in views}
+
+        total_du_mois = 0.0
+        total_global = 0.0
+
+        if 'View_FREIGHT_TND_DuMois' in view_set:
+            r = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [dbo].[View_FREIGHT_TND_DuMois]"))
+            row = r.mappings().first()
+            total_du_mois = float(row.get('s') or 0)
+
+        if 'View_FREIGHT_TND' in view_set:
+            r2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [dbo].[View_FREIGHT_TND]"))
+            row2 = r2.mappings().first()
+            total_global = float(row2.get('s') or 0)
+
+        return jsonify({'total_du_mois': total_du_mois, 'total_global': total_global})
+    except Exception as exc:
+        return jsonify({'error': str(exc), 'total_du_mois': 0, 'total_global': 0}), 500
 
 
 @api_bp.route('/factures/aa-detail/export', methods=['GET'])
