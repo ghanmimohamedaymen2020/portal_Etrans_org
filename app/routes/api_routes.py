@@ -250,16 +250,38 @@ def get_factures_aa_detail():
                    'count_du_mois': count_du_mois, 'count_global': count_global}
             if request.args.get('debug'):
                 samples = {}
-                if count_du_mois>0:
-                    rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                if count_du_mois > 0:
+                    rows_sample = db.session.execute(
+                        text(
+                            "SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC"
+                            " FROM [dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC"
+                        )
+                    ).mappings().all()
                     if not rows_sample:
-                        rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [Dashboard].[dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                        rows_sample = db.session.execute(
+                            text(
+                                "SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC"
+                                " FROM [Dashboard].[dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC"
+                            )
+                        ).mappings().all()
                     samples['du_mois'] = [dict(r) for r in rows_sample]
-                if count_global>0:
-                    rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+
+                if count_global > 0:
+                    rows_sample = db.session.execute(
+                        text(
+                            "SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC"
+                            " FROM [dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC"
+                        )
+                    ).mappings().all()
                     if not rows_sample:
-                        rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [Dashboard].[dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC")).mappings().all()
+                        rows_sample = db.session.execute(
+                            text(
+                                "SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC"
+                                " FROM [Dashboard].[dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC"
+                            )
+                        ).mappings().all()
                     samples['global'] = [dict(r) for r in rows_sample]
+
                 out['samples'] = samples
                 return jsonify(out)
         except Exception as exc:
