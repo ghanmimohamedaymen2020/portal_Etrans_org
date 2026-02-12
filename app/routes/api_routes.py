@@ -577,6 +577,225 @@ def get_ca_par_activite():
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
+
+@api_bp.route('/factures/ca-activite-total', methods=['GET'])
+@login_required
+def get_ca_activite_total():
+    """Retourne les totaux agrégés (ht, soumis, non_soumis, tva, ttc) par activité
+    ou pour un type spécifique si `type` est fourni. Paramètres: year, month, type.
+    """
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+    req_type = request.args.get('type')
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    try:
+        # Inspect available columns
+        entete_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Entete'
+        """)).scalars().all()
+        detail_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Detail'
+        """)).scalars().all()
+        total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Total'
+        """)).scalars().all()
+
+        entete_set = {c for c in entete_cols}
+        detail_set = {c for c in detail_cols}
+        total_set = {c for c in total_cols}
+
+        # build filters
+        params = {'year': year}
+        month_clause = ''
+        if month:
+            month_clause = ' AND MONTH(e.FF_H_DateProcess) = :month'
+            params['month'] = month
+        type_clause = ''
+        if req_type:
+            # choose the available column name for type
+            if 'FF_H_TypeFacture' in entete_set:
+                type_col = 'FF_H_TypeFacture'
+            elif 'FF_H_TypeFactRect' in entete_set:
+                type_col = 'FF_H_TypeFactRect'
+            else:
+                type_col = None
+            if type_col:
+                type_clause = f" AND UPPER(LTRIM(RTRIM(e.{type_col}))) = :type"
+                params['type'] = str(req_type).upper()
+
+        # If View_FF_Total exists with totals, prefer it for soumis/non_soumis
+        totals_by_type = {}
+        # check if freight view exists to use its process date for month filtering
+        freight_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FREIGHT_TND'
+        """)).scalars().all()
+        freight_set = {c for c in freight_cols}
+        has_freight = bool(freight_cols)
+        if {'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'} .issubset(total_set):
+            # If freight view exists, prefer to filter by freight process date
+            if has_freight:
+                # aggregate using View_FREIGHT_TND date boundaries
+                sql_tot = text(f"""
+                    SELECT
+                      SUM(COALESCE(ff.FF_T_TotalNonSoumis,0)) AS Total_NonSoumis,
+                      SUM(COALESCE(ff.FF_T_TotalSoumis,0)) AS Total_Soumis,
+                      SUM(COALESCE(ff.FF_T_TotalTVA,0)) AS Total_TVA,
+                      SUM(COALESCE(ff.FF_T_TotalTTC,0)) AS Total_TTC
+                    FROM [dbo].[View_FF_Total] ff
+                    INNER JOIN [dbo].[View_FREIGHT_TND] f ON ff.FF_T_NumFact = f.FF_D_NumFact
+                    LEFT JOIN [dbo].[View_FF_Entete] e ON ff.FF_T_NumFact = e.FF_H_NumFact
+                    WHERE YEAR(f.FF_H_DateProcess) = :year {month_clause} {type_clause}
+                """)
+                row = db.session.execute(sql_tot, params).mappings().first() or {}
+                # when type filter present, return single bucket under type key
+                if req_type:
+                    totals_by_type[req_type.upper()] = {
+                        'total_non_soumis': float(row.get('Total_NonSoumis') or 0),
+                        'total_soumis': float(row.get('Total_Soumis') or 0),
+                        'total_tva': float(row.get('Total_TVA') or 0),
+                        'total_ttc': float(row.get('Total_TTC') or 0),
+                        'total_ht': 0.0
+                    }
+                else:
+                    # no type requested: fallback to per-type grouping using entete
+                    sql_group = text(f"""
+                        SELECT UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) AS TypeService,
+                          SUM(COALESCE(ff.FF_T_TotalNonSoumis,0)) AS Total_NonSoumis,
+                          SUM(COALESCE(ff.FF_T_TotalSoumis,0)) AS Total_Soumis
+                        FROM [dbo].[View_FF_Total] ff
+                        INNER JOIN [dbo].[View_FREIGHT_TND] f ON ff.FF_T_NumFact = f.FF_D_NumFact
+                        LEFT JOIN [dbo].[View_FF_Entete] e ON ff.FF_T_NumFact = e.FF_H_NumFact
+                        WHERE YEAR(f.FF_H_DateProcess) = :year {month_clause}
+                        GROUP BY UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture)))
+                    """)
+                    rows = db.session.execute(sql_group, params).mappings().all()
+                    for r in rows:
+                        totals_by_type[r.get('TypeService')] = {
+                            'total_non_soumis': float(r.get('Total_NonSoumis') or 0),
+                            'total_soumis': float(r.get('Total_Soumis') or 0),
+                            'total_tva': 0.0,
+                            'total_ttc': 0.0,
+                            'total_ht': 0.0
+                        }
+            else:
+                sql_tot = text(f"""
+                    SELECT
+                        CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + ISNULL(d.FF_D_Devise,'') ELSE e.FF_H_TypeFacture END AS TypeService,
+                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis)) AS Total_NonSoumis,
+                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis)) AS Total_Soumis,
+                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalTVA)) AS Total_TVA,
+                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalTTC)) AS Total_TTC
+                    FROM [dbo].[View_FF_Entete] e
+                    LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact
+                    LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
+                    WHERE YEAR(e.FF_H_DateProcess) = :year {month_clause} {type_clause}
+                    GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + ISNULL(d.FF_D_Devise,'') ELSE e.FF_H_TypeFacture END
+                """)
+                rows = db.session.execute(sql_tot, params).mappings().all()
+                for r in rows:
+                    totals_by_type[r.get('TypeService')] = {
+                        'total_non_soumis': float(r.get('Total_NonSoumis') or 0),
+                        'total_soumis': float(r.get('Total_Soumis') or 0),
+                        'total_tva': float(r.get('Total_TVA') or 0),
+                        'total_ttc': float(r.get('Total_TTC') or 0),
+                        'total_ht': 0.0  # will fill from detail query
+                    }
+
+        # compute reliable Total_HT from details (fallback if missing)
+        if {'FF_D_NumFact', 'FF_D_MontantTTC', 'FF_D_MontantTVA'}.issubset(detail_set):
+            sql_ht = text(f"""
+                SELECT
+                    CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END AS TypeService,
+                    SUM(ISNULL(d.FF_D_MontantHT_TND, ISNULL(d.FF_D_MontantTTC,0) - ISNULL(d.FF_D_MontantTVA,0))) AS Total_HT
+                FROM [dbo].[View_FF_Entete] e
+                LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
+                WHERE YEAR(e.FF_H_DateProcess) = :year {month_clause} {type_clause}
+                GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END
+            """)
+            rows_ht = db.session.execute(sql_ht, params).mappings().all()
+            for r in rows_ht:
+                key = r.get('TypeService')
+                if key not in totals_by_type:
+                    totals_by_type[key] = {
+                        'total_non_soumis': 0.0,
+                        'total_soumis': 0.0,
+                        'total_tva': 0.0,
+                        'total_ttc': 0.0,
+                        'total_ht': float(r.get('Total_HT') or 0)
+                    }
+                else:
+                    totals_by_type[key]['total_ht'] = float(r.get('Total_HT') or 0)
+
+        # If totals_by_type is empty (no View_FF_Total), attempt to compute from details
+        if not totals_by_type:
+            # aggregate from details as best-effort
+            if {'FF_D_NumFact', 'FF_D_Montant'}.issubset(detail_set):
+                sql_fallback = text(f"""
+                    SELECT
+                        CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END AS TypeService,
+                        SUM(ISNULL(d.FF_D_MontantHT_TND, ISNULL(d.FF_D_MontantTTC,0) - ISNULL(d.FF_D_MontantTVA,0))) AS Total_HT,
+                        SUM(ISNULL(d.FF_D_Montant,0)) AS Total_Soumis,
+                        SUM(ISNULL(d.FF_D_MontantTVA,0)) AS Total_TVA,
+                        SUM(ISNULL(d.FF_D_MontantTTC,0)) AS Total_TTC
+                    FROM [dbo].[View_FF_Entete] e
+                    LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
+                    WHERE YEAR(e.FF_H_DateProcess) = :year {month_clause} {type_clause}
+                    GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END
+                """)
+                rows_fb = db.session.execute(sql_fallback, params).mappings().all()
+                for r in rows_fb:
+                    totals_by_type[r.get('TypeService')] = {
+                        'total_ht': float(r.get('Total_HT') or 0),
+                        'total_soumis': float(r.get('Total_Soumis') or 0),
+                        'total_non_soumis': 0.0,
+                        'total_tva': float(r.get('Total_TVA') or 0),
+                        'total_ttc': float(r.get('Total_TTC') or 0)
+                    }
+
+        # prepare response
+        if req_type:
+            # return single aggregate for requested type
+            # the request type may be stored as 'T' or as the 'A - X' form; try to find matching key
+            key_match = None
+            t_upper = str(req_type).upper()
+            for k in totals_by_type.keys():
+                if k and k.upper().startswith(t_upper):
+                    key_match = k
+                    break
+            if not key_match:
+                # return zeros if not found
+                return jsonify({'year': year, 'month': month, 'type': req_type,
+                                'total_ht': 0.0, 'total_soumis': 0.0, 'total_non_soumis': 0.0,
+                                'total_tva': 0.0, 'total_ttc': 0.0})
+            vals = totals_by_type[key_match]
+            return jsonify({'year': year, 'month': month, 'type': req_type,
+                            'total_ht': vals.get('total_ht', 0.0),
+                            'total_soumis': vals.get('total_soumis', 0.0),
+                            'total_non_soumis': vals.get('total_non_soumis', 0.0),
+                            'total_tva': vals.get('total_tva', 0.0),
+                            'total_ttc': vals.get('total_ttc', 0.0)})
+
+        # otherwise return dict by type
+        out = []
+        for k, v in totals_by_type.items():
+            out.append({'type_service': k,
+                        'total_ht': v.get('total_ht', 0.0),
+                        'total_soumis': v.get('total_soumis', 0.0),
+                        'total_non_soumis': v.get('total_non_soumis', 0.0),
+                        'total_tva': v.get('total_tva', 0.0),
+                        'total_ttc': v.get('total_ttc', 0.0)})
+
+        return jsonify({'year': year, 'month': month, 'rows': out})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
 @api_bp.route('/factures/ff-monthly', methods=['GET'])
 @login_required
 def get_ff_monthly_totals():
@@ -851,6 +1070,11 @@ def get_ff_list():
             select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis')
         else:
             select_parts.append("NULL AS ff_total_soumis")
+        # computed total (non_soumis + soumis) when at least one exists
+        if 'FF_T_TotalNonSoumis' in total_set or 'FF_T_TotalSoumis' in total_set:
+            select_parts.append('(COALESCE(t.FF_T_TotalNonSoumis,0) + COALESCE(t.FF_T_TotalSoumis,0)) AS ff_total')
+        else:
+            select_parts.append("NULL AS ff_total")
         if 'FF_T_TotalTVA' in total_set:
             select_parts.append('t.FF_T_TotalTVA AS ff_total_tva')
         else:
@@ -893,6 +1117,11 @@ def get_ff_list():
                 t_select.append('t.FF_T_TotalSoumis AS ff_total_soumis')
             else:
                 t_select.append("NULL AS ff_total_soumis")
+            # computed total for convenience
+            if 'FF_T_TotalNonSoumis' in total_set or 'FF_T_TotalSoumis' in total_set:
+                t_select.append('(COALESCE(t.FF_T_TotalNonSoumis,0) + COALESCE(t.FF_T_TotalSoumis,0)) AS ff_total')
+            else:
+                t_select.append("NULL AS ff_total")
             if 'FF_T_TotalTVA' in total_set:
                 t_select.append('t.FF_T_TotalTVA AS ff_total_tva')
             else:
@@ -1331,13 +1560,14 @@ def get_freight_summary():
             count_du_mois = int(row.get('cnt') or 0)
 
         if 'View_FREIGHT_TND' in view_set:
-            r2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND]"))
+            # use FF_D_MontantTTC for global/year totals as requested
+            r2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND]"))
             row2 = r2.mappings().first()
             total_global = float(row2.get('s') or 0)
             count_global = int(row2.get('cnt') or 0)
             if year:
-                # compute yearly total from full view by year
-                r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year})
+                # compute yearly total from full view by year using MontantTTC
+                r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year})
                 row3 = r3.mappings().first()
                 total_year = float(row3.get('s') or 0)
                 # override count for yearly if needed

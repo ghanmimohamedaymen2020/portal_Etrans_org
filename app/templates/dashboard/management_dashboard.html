@@ -1325,21 +1325,53 @@ document.addEventListener('DOMContentLoaded',function(){
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
         
-        // Prefer per-activity API that can return Total_HT when month is provided
-        const resp = await fetch(`/api/factures/ca-activite?year=${curYear}&month=${curMonth}`);
-        if(resp.ok){
-          const data = await resp.json();
-          let timVal = 0;
-          (data.rows||[]).forEach(r=>{
-            const t = (r.type_service||'').toString().trim();
-            const key = t.charAt(0).toUpperCase();
-            if(key === 'T') timVal = Number(r.total_ht||0);
-          });
-          setKpiValue('invoices', timVal.toLocaleString('fr-FR') + ' TND');
-        }else{
-          setKpiValue('invoices', '0 TND');
+        // Compute Timbrage KPI as ONLY (total_soumis + total_non_soumis)
+        try {
+          // First try server-side aggregate (preferred)
+          const aggResp = await fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${curMonth}&type=T`);
+          if (aggResp.ok) {
+            const agg = await aggResp.json();
+            const sum = Number(agg.total_soumis || 0) + Number(agg.total_non_soumis || 0);
+            setKpiValue('invoices', formatAmount(sum) + ' TND');
+          } else {
+            // Fallback: sum from detailed ff-list
+            const listResp = await fetch(`/api/factures/ff-list?month=${curMonth}&year=${curYear}&type=T`);
+            if (listResp.ok) {
+              const listJson = await listResp.json();
+              const rows = listJson.factures || [];
+              let sumDetail = 0;
+              rows.forEach(r => {
+                const non = r.ff_total_non_soumis ?? r.FF_T_TotalNonSoumis ?? r.ff_t_totalnonsoumis ?? r.total_non_soumis ?? 0;
+                const soum = r.ff_total_soumis ?? r.FF_T_TotalSoumis ?? r.ff_t_totalsoumis ?? r.total_soumis ?? 0;
+                sumDetail += Number(non || 0) + Number(soum || 0);
+              });
+              setKpiValue('invoices', formatAmount(sumDetail) + ' TND');
+            } else {
+              setKpiValue('invoices', '0 TND');
+            }
+          }
+        } catch(e) {
+          console.warn('Erreur agrégat/detail Timbrage:', e);
+          try {
+            const listResp = await fetch(`/api/factures/ff-list?month=${curMonth}&year=${curYear}&type=T`);
+            if (listResp.ok) {
+              const listJson = await listResp.json();
+              const rows = listJson.factures || [];
+              let sumDetail = 0;
+              rows.forEach(r => {
+                const non = r.ff_total_non_soumis ?? r.FF_T_TotalNonSoumis ?? r.ff_t_totalnonsoumis ?? r.total_non_soumis ?? 0;
+                const soum = r.ff_total_soumis ?? r.FF_T_TotalSoumis ?? r.ff_t_totalsoumis ?? r.total_soumis ?? 0;
+                sumDetail += Number(non || 0) + Number(soum || 0);
+              });
+              setKpiValue('invoices', formatAmount(sumDetail) + ' TND');
+            } else {
+              setKpiValue('invoices', '0 TND');
+            }
+          } catch(e2) {
+            setKpiValue('invoices', '0 TND');
+          }
         }
-        
+
         // KPI Agent - COUNT (pas THT car pas de THT pour Agent)
         try{
           const agentResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=A`);
@@ -1465,9 +1497,10 @@ document.addEventListener('DOMContentLoaded',function(){
             const freightJson = await freightResp.json();
             const total_du_mois = Number(freightJson.total_du_mois) || 0;
             const total_year = Number(freightJson.total_year) || 0;
-            setKpiValue('generated', total_year.toLocaleString('fr-FR') + ' TND');
+            // show both values: month on main KPI, year in the small line below
+            setKpiValue('generated', formatAmount(total_du_mois) + ' TND');
             const yearEl = document.querySelector('[data-kpi-value="generated-year"]');
-            if(yearEl) yearEl.textContent = total_du_mois.toLocaleString('fr-FR') + ' TND';
+            if(yearEl) yearEl.textContent = formatAmount(total_year) + ' TND';
           }
         } catch(e) { 
             console.error('Erreur chargement Freight:', e);
