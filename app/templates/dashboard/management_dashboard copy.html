@@ -138,7 +138,7 @@ body.list-only main {
 }
 
 .kpi-value {
-  font-size: 1.25rem;
+  font-size: 2rem;
   font-weight: 700;
   margin: 4px 0;
 }
@@ -150,7 +150,7 @@ body.list-only main {
 
 /* inline KPI numbers used inside kpi-sub (smaller than main .kpi-value but enlarged) */
 .kpi-value-inline {
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 700;
   margin-left: 6px;
   display: inline-block;
@@ -817,8 +817,6 @@ document.addEventListener('DOMContentLoaded',function(){
   let listMode='summary';
   let commercialFilter=null;
   let deviseChart=null;
-  // Global cache for monthly activity (shared across functions)
-  window.monthlyActivityCache = window.monthlyActivityCache || null;
 
   function storageKey(){
     return `mgmt_hidden_cols_${currentListKey||'default'}`;
@@ -1324,171 +1322,76 @@ document.addEventListener('DOMContentLoaded',function(){
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
-        
         // Prefer per-activity API that can return Total_HT when month is provided
         const resp = await fetch(`/api/factures/ca-activite?year=${curYear}&month=${curMonth}`);
         if(resp.ok){
           const data = await resp.json();
+          // data.rows is an array with objects {type_service, total_ht, ...}
           let timVal = 0;
+          let magVal = 0;
+          let magSoumisSum = 0;
           (data.rows||[]).forEach(r=>{
             const t = (r.type_service||'').toString().trim();
             const key = t.charAt(0).toUpperCase();
             if(key === 'T') timVal = Number(r.total_ht||0);
+            if(key === 'M'){
+              magVal = Number(r.total_ht||0);
+              magSoumisSum += Number(r.total_soumis||r.total_soumis||0);
+            }
           });
           setKpiValue('invoices', timVal.toLocaleString('fr-FR') + ' TND');
+          // set magasinage KPI: show sum of Total_Soumis (TND)
+          const magEl = document.querySelector('[data-kpi-value="invoices-magasinage"]');
+          if(magEl) magEl.textContent = magSoumisSum.toLocaleString('fr-FR') + ' TND';
         }else{
           setKpiValue('invoices', '0 TND');
         }
-        
-        // KPI Agent - COUNT (pas THT car pas de THT pour Agent)
+        // Keep agent/surestarie/magasinage KPI counts as before (counts)
         try{
           const agentResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=A`);
           const agentJson = await agentResp.json();
-          setKpiValue('invoices-agent', (agentJson.count || 0) + ' facture(s)');
-        }catch(e){ 
-          setKpiValue('invoices-agent', '0 facture(s)'); 
-        }
-        
-        // ============================================
-        // MAGASINAGE - SOMME THT (FF_T_TotalNonSoumis)
-        // ============================================
-        try {
-          // Récupérer les factures de magasinage du mois
-          const magMonthResp = await fetch(`/api/factures/ff-list?month=${curMonth}&year=${curYear}&type=M`);
-          if (magMonthResp.ok) {
-            const magMonthData = await magMonthResp.json();
-            const magFactures = magMonthData.factures || [];
-
-            // Calculer la somme (FF_T_TotalNonSoumis + FF_T_TotalSoumis) pour le mois
-            let sommeMois = 0;
-            magFactures.forEach(facture => {
-              const non = facture.FF_T_TotalNonSoumis || facture.ff_t_totalnonsoumis || facture.ff_total_non_soumis || facture.total_non_soumis || 0;
-              const soum = facture.FF_T_TotalSoumis || facture.ff_t_totalsoumis || facture.ff_total_soumis || facture.total_soumis || 0;
-              sommeMois += Number(non || 0) + Number(soum || 0);
-            });
-
-            // Afficher la somme dans la carte principale et la sous-valeur mois
-            setKpiValue('invoices-magasinage', formatAmount(sommeMois) + ' TND');
-            setKpiValue('invoices-magasinage-tht-month', formatAmount(sommeMois) + ' TND');
-          } else {
-            console.warn('API Magasinage mois non disponible');
-            setKpiValue('invoices-magasinage', '0 TND');
-            setKpiValue('invoices-magasinage-tht-month', '0 TND');
-          }
-
-          // Récupérer les factures de magasinage de l'année
-          const magYearResp = await fetch(`/api/factures/ff-list?year=${curYear}&type=M`);
-          if (magYearResp.ok) {
-            const magYearData = await magYearResp.json();
-            const magFacturesYear = magYearData.factures || [];
-
-            // Calculer la somme (FF_T_TotalNonSoumis + FF_T_TotalSoumis) pour l'année
-            let sommeAnnee = 0;
-            magFacturesYear.forEach(facture => {
-              const non = facture.FF_T_TotalNonSoumis || facture.ff_t_totalnonsoumis || facture.total_non_soumis || facture.ff_total_non_soumis || 0;
-              const soum = facture.FF_T_TotalSoumis || facture.ff_t_totalsoumis || facture.total_soumis || facture.ff_total_soumis || 0;
-              sommeAnnee += Number(non || 0) + Number(soum || 0);
-            });
-
-            setKpiValue('invoices-magasinage-tht-year', formatAmount(sommeAnnee) + ' TND');
-          } else {
-            console.warn('API Magasinage année non disponible');
-            setKpiValue('invoices-magasinage-tht-year', '0 TND');
-          }
-        } catch(e) {
-          console.error('Erreur chargement THT Magasinage:', e);
-          setKpiValue('invoices-magasinage', '0 TND');
-          setKpiValue('invoices-magasinage-tht-month', '0 TND');
-          setKpiValue('invoices-magasinage-tht-year', '0 TND');
-        }
-        
-        // ============================================
-        // SURESTARIE - SOMME (ff_total_non_soumis + ff_total_soumis)
-        // ============================================
-        try {
-          // Récupérer les factures de surestarie du mois
-          const sureMonthResp = await fetch(`/api/factures/ff-list?month=${curMonth}&year=${curYear}&type=S`);
-          if (sureMonthResp.ok) {
-            const sureMonthData = await sureMonthResp.json();
-            const sureFactures = sureMonthData.factures || [];
-
-            // Calculer la somme (ff_total_non_soumis + ff_total_soumis) pour le mois
-            let sommeMois = 0;
-            sureFactures.forEach(facture => {
-              const non = facture.ff_total_non_soumis ?? facture.FF_T_TotalNonSoumis ?? facture.ff_t_totalnonsoumis ?? facture.total_non_soumis ?? 0;
-              const soum = facture.ff_total_soumis ?? facture.FF_T_TotalSoumis ?? facture.ff_t_totalsoumis ?? facture.total_soumis ?? 0;
-              sommeMois += Number(non || 0) + Number(soum || 0);
-            });
-
-            setKpiValue('invoices-surestarie', formatAmount(sommeMois) + ' TND');
-            setKpiValue('invoices-surestarie-tht-month', formatAmount(sommeMois) + ' TND');
-          } else {
-            console.warn('API Surestarie mois non disponible');
-            setKpiValue('invoices-surestarie', '0 TND');
-            setKpiValue('invoices-surestarie-tht-month', '0 TND');
-          }
-
-          // Récupérer les factures de surestarie de l'année
-          const sureYearResp = await fetch(`/api/factures/ff-list?year=${curYear}&type=S`);
-          if (sureYearResp.ok) {
-            const sureYearData = await sureYearResp.json();
-            const sureFacturesYear = sureYearData.factures || [];
-
-            // Calculer la somme pour l'année
-            let sommeAnnee = 0;
-            sureFacturesYear.forEach(facture => {
-              const non = facture.ff_total_non_soumis ?? facture.FF_T_TotalNonSoumis ?? facture.ff_t_totalnonsoumis ?? facture.total_non_soumis ?? 0;
-              const soum = facture.ff_total_soumis ?? facture.FF_T_TotalSoumis ?? facture.ff_t_totalsoumis ?? facture.total_soumis ?? 0;
-              sommeAnnee += Number(non || 0) + Number(soum || 0);
-            });
-
-            setKpiValue('invoices-surestarie-tht-year', formatAmount(sommeAnnee) + ' TND');
-          } else {
-            console.warn('API Surestarie année non disponible');
-            setKpiValue('invoices-surestarie-tht-year', '0 TND');
-          }
-        } catch(e) {
-          console.error('Erreur chargement Surestarie:', e);
-          setKpiValue('invoices-surestarie', '0 TND');
-          setKpiValue('invoices-surestarie-tht-month', '0 TND');
-          setKpiValue('invoices-surestarie-tht-year', '0 TND');
-        }
-        
-        // ============================================
-        // FREIGHT - Totaux mensuel et annuel
-        // ============================================
+          setKpiValue('invoices-agent', agentJson.count || 0);
+        }catch(e){ setKpiValue('invoices-agent', 0); }
         try{
-          const now = new Date();
-          const curYear = now.getFullYear();
-          const freightResp = await fetch(`/api/freight/summary?year=${curYear}`);
-          if(freightResp.ok){
-            const freightJson = await freightResp.json();
-            const total_du_mois = Number(freightJson.total_du_mois) || 0;
-            const total_year = Number(freightJson.total_year) || 0;
-            setKpiValue('generated', total_year.toLocaleString('fr-FR') + ' TND');
-            const yearEl = document.querySelector('[data-kpi-value="generated-year"]');
-            if(yearEl) yearEl.textContent = total_du_mois.toLocaleString('fr-FR') + ' TND';
-          }
-        } catch(e) { 
-            console.error('Erreur chargement Freight:', e);
-          }
-
-        // Précharger les données mensuelles d'activité utilisées par le graphique
+          const sResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=S`);
+          const sJson = await sResp.json();
+          setKpiValue('invoices-surestarie', sJson.count || 0);
+        }catch(e){ setKpiValue('invoices-surestarie', 0); }
         try{
-          const maResp = await fetch(`/api/factures/ff-monthly-activity`);
-          if(maResp.ok){
-            const maJson = await maResp.json();
-            window.monthlyActivityCache = maJson.categories || maJson.current || (maJson.activities && maJson.activities.current) || {};
+          // Use monthly activity API to get Magasinage THT for current month
+          if(resp && resp.ok){
+            const magArr = (data.current && data.current.magasinage) || [];
+            const magVal = Number((magArr[curMonth-1])||0);
+            setKpiValue('invoices-magasinage', magVal.toLocaleString('fr-FR') + ' TND');
+          }else{
+            // fallback to count endpoint if activity API not available
+            const mResp = await fetch(`/api/factures/count?month=${curMonth}&year=${curYear}&type=M`);
+            const mJson = await mResp.json();
+            setKpiValue('invoices-magasinage', mJson.count || 0);
           }
-        }catch(e){
-          // ignore preload errors
-        }
-        
-      } catch(e) {
-        console.error('Erreur globale initKpiCounts:', e);
+        }catch(e){ setKpiValue('invoices-magasinage', 0); }
+      }catch(e){
+        // Fallback to zero on error
+        setKpiValue('invoices', '0 TND');
       }
-    } catch(e) {
-      console.error('Erreur fatale initKpiCounts:', e);
+      // Get freight summary totals and update 'generated' KPI (month + year)
+      try{
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const freightResp = await fetch(`/api/freight/summary?year=${curYear}`);
+        if(freightResp.ok){
+          const freightJson = await freightResp.json();
+          const total_du_mois = Number(freightJson.total_du_mois) || 0;
+          const total_year = Number(freightJson.total_year) || 0;
+          // invert values: put year total in the main KPI and month total in the year sub-value
+          setKpiValue('generated', total_year.toLocaleString('fr-FR') + ' TND');
+          const yearEl = document.querySelector('[data-kpi-value="generated-year"]');
+          if(yearEl) yearEl.textContent = total_du_mois.toLocaleString('fr-FR') + ' TND';
+        }
+      }catch(e){ /* ignore */ }
+    }catch{
+      setKpiValue('not-stamped',0);
+      setKpiValue('invoices',0);
     }
   }
 
@@ -1787,8 +1690,6 @@ document.addEventListener('DOMContentLoaded',function(){
     surestarie: { label: 'Surestarie', data: [...barData], backgroundColor: '#e74c3c' }
   };
 
-  // Note: use global `window.monthlyActivityCache` populated earlier
-
   const barChart=new Chart(barCtx,{
     type:'bar',
     data:{
@@ -1844,18 +1745,12 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function loadMonthlyTurnover(){
     try{
-      let categories = null;
-      if(window.monthlyActivityCache){
-        categories = window.monthlyActivityCache;
-      }else{
-        const response=await fetch('/api/factures/ff-monthly-activity');
-        const data=await response.json();
-        if(!response.ok){
-          throw new Error(data.error||'Erreur API');
-        }
-        categories = data.categories || data.current || (data.activities&&data.activities.current) || {};
-        window.monthlyActivityCache = categories;
+      const response=await fetch('/api/factures/ff-monthly-activity');
+      const data=await response.json();
+      if(!response.ok){
+        throw new Error(data.error||'Erreur API');
       }
+      const categories = data.categories || data.current || (data.activities&&data.activities.current) || {};
 
       // Robust conversion to numeric month values (handles numbers, strings, or objects {source, parsedValue})
       function toNumber(val){

@@ -501,6 +501,7 @@ def get_ca_par_activite():
     Accepts optional `year` query param (defaults to current year).
     """
     year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
     if not year:
         from datetime import datetime
         year = datetime.utcnow().year
@@ -547,6 +548,7 @@ def get_ca_par_activite():
                 ON H.FF_H_NumFact = D.FF_D_NumFact
             WHERE UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) IN ('T','S','A','M')
               AND YEAR(H.FF_H_DateProcess) = :year
+              """ + (" AND MONTH(H.FF_H_DateProcess) = :month" if month else "") + """
             GROUP BY
                 CASE
                     WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
@@ -556,7 +558,11 @@ def get_ca_par_activite():
             ORDER BY TypeService
         """)
 
-        rows = db.session.execute(sql, {'year': year}).mappings().all()
+        params = {'year': year}
+        if month:
+            params['month'] = month
+
+        rows = db.session.execute(sql, params).mappings().all()
         results = []
         for r in rows:
             results.append({
