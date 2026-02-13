@@ -1897,7 +1897,16 @@ document.addEventListener('DOMContentLoaded',function(){
           callbacks:{
             label:function(context){
               const val = (context.parsed && (context.parsed.y !== undefined ? context.parsed.y : context.parsed)) || 0;
-              try{ return `${formatAmount(val)} TND`; }catch(e){ return `${val} TND`; }
+              // Determine currency suffix from dataset if possible (Agent may be EUR/USD)
+              const ds = context.dataset || {};
+              const lbl = (ds.label || '').toString();
+              let suffix = 'TND';
+              try{
+                if(/\bEUR\b/i.test(lbl)) suffix = 'EUR';
+                else if(/\bUSD\b/i.test(lbl)) suffix = 'USD';
+                else if(/\bTND\b/i.test(lbl)) suffix = 'TND';
+              }catch(e){ /* ignore */ }
+              try{ return `${formatAmount(val)} ${suffix}`; }catch(e){ return `${val} ${suffix}`; }
             }
           }
         }
