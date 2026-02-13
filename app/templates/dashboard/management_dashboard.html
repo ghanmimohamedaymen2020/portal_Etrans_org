@@ -2128,51 +2128,46 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function loadActivityData(){
     try{
-      const response = await fetch('/api/factures/ca-activite');
-      const data = await response.json();
-      if(!response.ok) throw new Error(data.error||'Erreur API');
-      const rows = data.rows || [];
-      // Aggregate rows: keep Timbrage/Magasinage/Surestarie single, split Agent by currency
+      // Prefer using the same monthly datasets as the histogram so values match exactly.
+      // If the monthly datasets aren't loaded yet, load them first.
+      if(!window.monthlyActivityCache || !datasets || !Array.isArray(datasets.timbrage.data) || datasets.timbrage.data.length===0){
+        await loadMonthlyTurnover();
+      }
+
+      // Build annual totals from the monthly datasets (sums across months)
       const map = {};
       let agentTotal = 0;
-      rows.forEach(r=>{
-        const raw = (r.type_service||'').toString().trim();
-        if(!raw) return;
-        const first = raw[0].toUpperCase();
-        const val = Number(r.total_ht)||0;
-        if(first === 'A'){
-          // keep agent entries per currency (e.g. 'A - EUR')
-          const label = raw; // preserve original 'A - EUR' format
-          map[label] = (map[label]||0) + val;
-          agentTotal += val;
-        }else if(first === 'T'){
-          map['Timbrage'] = (map['Timbrage']||0) + val;
-        }else if(first === 'M'){
-          map['Magasinage'] = (map['Magasinage']||0) + val;
-        }else if(first === 'S'){
-          map['Surestarie'] = (map['Surestarie']||0) + val;
-        }else{
-          // unknown, add as-is
-          map[raw] = (map[raw]||0) + val;
-        }
-      });
+      // Timbrage/Magasinage/Surestarie come from datasets.timbrage/magasinage/surestarie
+      const sumArray = arr => (Array.isArray(arr)? arr.reduce((a,b)=>a+Number(b||0),0):0);
+      map['Timbrage'] = sumArray(datasets.timbrage.data);
+      map['Magasinage'] = sumArray(datasets.magasinage.data);
+      map['Surestarie'] = sumArray(datasets.surestarie.data);
+
+      // Agent per-currency datasets were built as datasets.agent_currencies
+      if(Array.isArray(datasets.agent_currencies)){
+        datasets.agent_currencies.forEach(ds=>{
+          const label = (ds.label||'Agent').toString();
+          const total = sumArray(ds.data);
+          // Keep label starting with 'A' to be compatible with existing rendering
+          const key = label.startsWith('A')? label : ('Agent - ' + label.split('-').pop().trim());
+          map[key] = (map[key]||0) + total;
+          agentTotal += total;
+        });
+      }
 
       const tTimbrage = Number(map['Timbrage']||0);
       const tMagasinage = Number(map['Magasinage']||0);
       const tSurestarie = Number(map['Surestarie']||0);
-      // compute totals by currency: agent entries specify currency after '-'
+      // compute totals by currency from the aggregated `map` keys
       const totalsByCurrency = {};
-      rows.forEach(r=>{
-        const raw = (r.type_service||'').toString().trim();
+      Object.keys(map).forEach(raw=>{
         if(!raw) return;
         const parts = raw.split('-').map(s=>s.trim());
-        const amount = Number(r.total_ht)||0;
+        const amount = Number(map[raw]||0);
         if(parts.length>1){
-          // agent with currency like 'A - USD'
           const cur = parts[1].toUpperCase();
           totalsByCurrency[cur] = (totalsByCurrency[cur]||0) + amount;
         } else {
-          // non-agent assumed TND
           totalsByCurrency['TND'] = (totalsByCurrency['TND']||0) + amount;
         }
       });
