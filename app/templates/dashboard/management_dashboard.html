@@ -2192,7 +2192,10 @@ document.addEventListener('DOMContentLoaded',function(){
       const labels = ['Timbrage','Magasinage', ...agentLabels, 'Surestarie'].filter((v,i,a)=>a.indexOf(v)===i);
       const dataVals = labels.map(l=> Number(map[l]||0));
       const palette = ['#3498db','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#34495e','#e67e22'];
-      const bg = labels.map((_,i)=> palette[i%palette.length]);
+      const bg = labels.map((lbl,i)=> {
+        if(String(lbl).trim().toLowerCase() === 'surestarie') return '#e74c3c';
+        return palette[i%palette.length];
+      });
       activityChart.data.labels = labels;
       activityChart.data.datasets[0].data = dataVals;
       activityChart.data.datasets[0].backgroundColor = bg;
