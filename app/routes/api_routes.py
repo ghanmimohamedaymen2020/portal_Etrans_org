@@ -612,9 +612,10 @@ def get_ca_activite_total():
 
         # build filters
         params = {'year': year}
+        # use the same date coalescing as ff-monthly-activity: prefer AA date, then freight, then entete
         month_clause = ''
         if month:
-            month_clause = ' AND MONTH(e.FF_H_DateProcess) = :month'
+            month_clause = ' AND MONTH(COALESCE(a.AA_H_DateProcess, f.FF_H_DateProcess, e.FF_H_DateProcess)) = :month'
             params['month'] = month
         type_clause = ''
         if req_type:
@@ -638,10 +639,8 @@ def get_ca_activite_total():
         """)).scalars().all()
         freight_set = {c for c in freight_cols}
         has_freight = bool(freight_cols)
-        if {'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'} .issubset(total_set):
-            # If freight view exists, prefer to filter by freight process date
+        if {'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'}.issubset(total_set):
             if has_freight:
-                # aggregate using View_FREIGHT_TND date boundaries
                 sql_tot = text(f"""
                     SELECT
                       SUM(COALESCE(ff.FF_T_TotalNonSoumis,0)) AS Total_NonSoumis,
@@ -651,10 +650,10 @@ def get_ca_activite_total():
                     FROM [dbo].[View_FF_Total] ff
                     INNER JOIN [dbo].[View_FREIGHT_TND] f ON ff.FF_T_NumFact = f.FF_D_NumFact
                     LEFT JOIN [dbo].[View_FF_Entete] e ON ff.FF_T_NumFact = e.FF_H_NumFact
-                    WHERE YEAR(f.FF_H_DateProcess) = :year {month_clause} {type_clause}
+                    LEFT JOIN [dbo].[View_AA_AvecFacture] a ON a.AA_H_NumFacture = ff.FF_T_NumFact
+                    WHERE YEAR(COALESCE(a.AA_H_DateProcess, f.FF_H_DateProcess, e.FF_H_DateProcess)) = :year {month_clause} {type_clause}
                 """)
                 row = db.session.execute(sql_tot, params).mappings().first() or {}
-                # when type filter present, return single bucket under type key
                 if req_type:
                     totals_by_type[req_type.upper()] = {
                         'total_non_soumis': float(row.get('Total_NonSoumis') or 0),
@@ -664,7 +663,6 @@ def get_ca_activite_total():
                         'total_ht': 0.0
                     }
                 else:
-                    # no type requested: fallback to per-type grouping using entete
                     sql_group = text(f"""
                         SELECT UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) AS TypeService,
                           SUM(COALESCE(ff.FF_T_TotalNonSoumis,0)) AS Total_NonSoumis,
@@ -672,7 +670,8 @@ def get_ca_activite_total():
                         FROM [dbo].[View_FF_Total] ff
                         INNER JOIN [dbo].[View_FREIGHT_TND] f ON ff.FF_T_NumFact = f.FF_D_NumFact
                         LEFT JOIN [dbo].[View_FF_Entete] e ON ff.FF_T_NumFact = e.FF_H_NumFact
-                        WHERE YEAR(f.FF_H_DateProcess) = :year {month_clause}
+                        LEFT JOIN [dbo].[View_AA_AvecFacture] a ON a.AA_H_NumFacture = ff.FF_T_NumFact
+                        WHERE YEAR(COALESCE(a.AA_H_DateProcess, f.FF_H_DateProcess, e.FF_H_DateProcess)) = :year {month_clause}
                         GROUP BY UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture)))
                     """)
                     rows = db.session.execute(sql_group, params).mappings().all()
@@ -695,7 +694,8 @@ def get_ca_activite_total():
                     FROM [dbo].[View_FF_Entete] e
                     LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact
                     LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
-                    WHERE YEAR(e.FF_H_DateProcess) = :year {month_clause} {type_clause}
+                    LEFT JOIN [dbo].[View_AA_AvecFacture] a ON a.AA_H_NumFacture = e.FF_H_NumFact
+                    WHERE YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year {month_clause} {type_clause}
                     GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + ISNULL(d.FF_D_Devise,'') ELSE e.FF_H_TypeFacture END
                 """)
                 rows = db.session.execute(sql_tot, params).mappings().all()
@@ -1016,12 +1016,35 @@ def get_ff_monthly_activity_totals():
             by_month = {int(r['month']): r for r in rows}
             def get_list(key):
                 return [float(by_month.get(m, {}).get(key) or 0) for m in range(1, 13)]
-            return {
+            activities = {
                 'timbrage': get_list('timbrage'),
                 'magasinage': get_list('magasinage'),
                 'agent': get_list('agent'),
                 'surestarie': get_list('surestarie')
             }
+            # Compute timbrage series directly from View_FF_Total + View_FF_Entete
+            # using the exact SQL provided by the user (month 1..12). This will
+            # replace the earlier computed timbrage values so the histogram uses
+            # the same logic as the KPI card.
+            try:
+                tim_sql = text("""
+                    SELECT MONTH(e.FF_H_DateProcess) AS month,
+                           SUM(ISNULL(ff.FF_T_TotalSoumis,0) + ISNULL(ff.FF_T_TotalNonSoumis,0)) AS timbrage
+                    FROM dbo.View_FF_Total ff
+                    INNER JOIN dbo.View_FF_Entete e ON ff.FF_T_NumFact = e.FF_H_NumFact
+                    WHERE UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
+                      AND YEAR(e.FF_H_DateProcess) = :year
+                    GROUP BY MONTH(e.FF_H_DateProcess)
+                    ORDER BY month
+                """)
+                t_rows = db.session.execute(tim_sql, {'year': target_year}).mappings().all()
+                t_by_month = {int(r['month']): float(r['timbrage'] or 0) for r in t_rows}
+                activities['timbrage'] = [float(t_by_month.get(m, 0)) for m in range(1,13)]
+            except Exception:
+                # If query fails, keep previously computed timbrage
+                pass
+
+            return activities
 
         debug = request.args.get('debug')
         result = {

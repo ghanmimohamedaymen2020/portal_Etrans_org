@@ -1951,6 +1951,40 @@ document.addEventListener('DOMContentLoaded',function(){
       datasets.surestarie.data = new Array(12).fill(0);
       datasets.agent_currencies = [];
 
+      // Compute monthly series using the same logic as KPI cards:
+      // - Timbrage/Magasinage/Surestarie: use `/api/factures/ca-activite-total` per month
+      // - Agent: use `/api/factures/agent-totals` per month (provides EUR/USD)
+      // Do the 12 months in parallel and fall back safely on any error.
+      try{
+        const curYear = new Date().getFullYear();
+        const monthReqs = [];
+        for(let m=1;m<=12;m++){
+          monthReqs.push(Promise.all([
+            fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${m}&type=T`).then(r=> r.ok? r.json() : { total_soumis:0, total_non_soumis:0 }).catch(()=>({ total_soumis:0, total_non_soumis:0 })),
+            fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${m}&type=M`).then(r=> r.ok? r.json() : { total_soumis:0, total_non_soumis:0 }).catch(()=>({ total_soumis:0, total_non_soumis:0 })),
+            fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${m}&type=S`).then(r=> r.ok? r.json() : { total_soumis:0, total_non_soumis:0 }).catch(()=>({ total_soumis:0, total_non_soumis:0 })),
+            fetch(`/api/factures/agent-totals?year=${curYear}&month=${m}`).then(r=> r.ok? r.json() : { totals:{} }).catch(()=>({ totals:{} }))
+          ]));
+        }
+        const months = await Promise.all(monthReqs);
+        const timbrageMonths = months.map(r => Number(r[0].total_soumis||0) + Number(r[0].total_non_soumis||0));
+        const magasinageMonths = months.map(r => Number(r[1].total_soumis||0) + Number(r[1].total_non_soumis||0));
+        const surestarieMonths = months.map(r => Number(r[2].total_soumis||0) + Number(r[2].total_non_soumis||0));
+        const agentEUR = months.map(r => Number((r[3].totals && r[3].totals.EUR) || 0));
+        const agentUSD = months.map(r => Number((r[3].totals && r[3].totals.USD) || 0));
+
+        datasets.timbrage.data = timbrageMonths;
+        datasets.magasinage.data = magasinageMonths;
+        datasets.surestarie.data = surestarieMonths;
+        // Build Agent per-currency datasets (preserve existing palette ordering)
+        const palette = ['#f39c12','#9b59b6','#1abc9c'];
+        datasets.agent_currencies = [];
+        datasets.agent_currencies.push({ label: 'Agent - EUR', data: agentEUR, backgroundColor: palette[0] });
+        datasets.agent_currencies.push({ label: 'Agent - USD', data: agentUSD, backgroundColor: palette[1] });
+      }catch(e){
+        console.warn('Erreur chargement CA mensuel via ca-activite-total/agent-totals', e);
+      }
+
       const palette = ['#3498db','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#34495e','#e67e22'];
       let colorIndex = 0;
 
