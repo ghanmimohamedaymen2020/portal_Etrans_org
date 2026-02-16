@@ -1507,7 +1507,18 @@ document.addEventListener('DOMContentLoaded',function(){
           }
         }
         const hiddenClass=hiddenColumns.has(col.key)?'hidden-col':'';
-        return `<td data-col="${col.key}" class="${hiddenClass}">${value}</td>`;
+        // Make invoice reference clickable to open invoice details
+        let cellHtml = value;
+        try{
+          const keyLow = (col.key||'').toString().toLowerCase();
+          if(keyLow === 'reference' || /numf|numfact|num_fact/i.test(col.key)){
+            const inv = String(value||'').trim();
+            if(inv){
+              cellHtml = `<a href="#" class="invoice-link" data-invoice="${inv}">${inv}</a>`;
+            }
+          }
+        }catch(e){ /* ignore formatting errors */ }
+        return `<td data-col="${col.key}" class="${hiddenClass}">${cellHtml}</td>`;
       }).join('');
       if(currentListKey==='generated'&&listMode==='summary'){
         tr.classList.add('clickable-row');
@@ -1935,6 +1946,44 @@ document.addEventListener('DOMContentLoaded',function(){
     invoicesModal.classList.add('visible');
     invoicesModal.setAttribute('aria-hidden','false');
   }
+
+  // Handle clicks on invoice reference links inside lists
+  document.addEventListener('click', async function(e){
+    const a = e.target.closest && e.target.closest('.invoice-link');
+    if(!a) return;
+    e.preventDefault();
+    const inv = a.getAttribute('data-invoice');
+    if(!inv) return;
+    try{
+      // fetch detail rows and show in modal (reuse invoices modal table)
+      const resp = await fetch(`/api/factures/details-by-invoices?invoices=${encodeURIComponent(inv)}`);
+      const json = await resp.json();
+      if(!resp.ok){
+        alert('Erreur chargement détails: ' + (json.error||resp.statusText));
+        return;
+      }
+      const rows = json.details || [];
+      invoicesModalTitle.textContent = `Détails — ${inv}`;
+      if(!rows.length){
+        invoicesModalBody.innerHTML = `<tr><td colspan="8">Aucun détail trouvé pour ${inv}</td></tr>`;
+      } else {
+        invoicesModalBody.innerHTML = rows.map(r=>{
+          return `<tr>
+            <td>${r.invoice_num||''}</td>
+            <td>${r.devise||''}</td>
+            <td>${r.montant!==undefined?formatAmount(r.montant):''}</td>
+            <td>${r.montant_tva!==undefined?formatAmount(r.montant_tva):''}</td>
+            <td>${r.montant_ttc!==undefined?formatAmount(r.montant_ttc):''}</td>
+            <td>${r.montant_ht_tnd!==undefined?formatAmount(r.montant_ht_tnd):''}</td>
+          </tr>`;
+        }).join('');
+      }
+      openInvoicesModal();
+    }catch(err){
+      console.error('Erreur fetch invoice details', err);
+      alert('Erreur chargement détails facture');
+    }
+  });
 
   invoicesModalClose?.addEventListener('click', closeInvoicesModal);
   invoicesModal?.addEventListener('click', function(e){ if(e.target===invoicesModal) closeInvoicesModal(); });
