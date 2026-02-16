@@ -737,16 +737,22 @@ def get_details_by_invoices():
     if not parts:
         return jsonify({'error': 'No invoice numbers provided'}), 400
     try:
-        # inspect available columns on the view and choose a safe subset
+        # inspect available columns on the detail and entete views and choose a safe subset
         detail_cols = db.session.execute(text("""
             SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Detail'
         """)).scalars().all()
+        entete_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Entete'
+        """)).scalars().all()
         detail_set = {c for c in detail_cols}
+        entete_set = {c for c in entete_cols}
 
-        # preferred columns (alias mapping) - will pick those that exist
-        preferred = [
+        # preferred detail columns (alias mapping)
+        preferred_detail = [
             ('FF_D_NumFact', 'invoice_num'),
+            ('FF_D_Libelle', 'libelle'),
             ('FF_D_Devise', 'devise'),
             ('FF_D_Montant', 'montant'),
             ('FF_D_MontantTVA', 'montant_tva'),
@@ -754,9 +760,21 @@ def get_details_by_invoices():
             ('FF_D_MontantHT_TND', 'montant_ht_tnd')
         ]
 
-        select_parts = [f"d.{col} AS {alias}" for col, alias in preferred if col in detail_set]
+        # preferred entete columns to provide context for detail rows
+        preferred_entete = [
+            ('FF_H_DateProcess', 'date_process'),
+            ('FF_H_Dossier', 'dossier'),
+            ('FF_H_NomClient', 'nom_client'),
+            ('FF_H_ETA', 'eta'),
+            ('FF_H_House', 'house'),
+            ('FF_H_Service', 'service')
+        ]
+
+        select_parts = [f"d.{col} AS {alias}" for col, alias in preferred_detail if col in detail_set]
+        # include entete columns by joining entete and prefixing with e.
+        select_parts += [f"e.{col} AS {alias}" for col, alias in preferred_entete if col in entete_set]
         if not select_parts:
-            return jsonify({'error': 'Aucune colonne disponible dans View_FF_Detail pour afficher les détails'}), 500
+            return jsonify({'error': 'Aucune colonne disponible dans View_FF_Detail/View_FF_Entete pour afficher les détails'}), 500
 
         # build parameterized IN list
         placeholders = ','.join([f":inv{i}" for i in range(len(parts))])
@@ -764,6 +782,7 @@ def get_details_by_invoices():
         sql = text(f"""
             SELECT {', '.join(select_parts)}
             FROM dbo.View_FF_Detail d
+            LEFT JOIN dbo.View_FF_Entete e ON d.FF_D_NumFact = e.FF_H_NumFact
             WHERE d.FF_D_NumFact IN ({placeholders})
             ORDER BY d.FF_D_NumFact
         """)

@@ -732,6 +732,7 @@ body.chart-only.show-chart-list .list-section {
       <table class="modal-table" id="invoices-modal-table">
         <thead>
           <tr>
+            <th>Libellé</th>
             <th>Devise</th>
             <th>Montant</th>
             <th>Montant TVA</th>
@@ -1985,6 +1986,7 @@ document.addEventListener('DOMContentLoaded',function(){
         // Render detail rows (devise, montant, montant_tva, montant_ttc, montant_ht_tnd)
         invoicesModalBody.innerHTML = rows.map(r=>{
           return `<tr>
+            <td>${r.libelle||''}</td>
             <td>${r.devise||''}</td>
             <td>${r.montant!==undefined?formatAmount(r.montant):''}</td>
             <td>${r.montant_tva!==undefined?formatAmount(r.montant_tva):''}</td>
