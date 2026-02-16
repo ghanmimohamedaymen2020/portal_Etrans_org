@@ -892,6 +892,20 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'total_ttc',label:'Total TTC'},
       {key:'devise',label:'Devise'}
     ],
+    invoicesAgent:[
+      {key:'reference',label:'Numéro avis'},
+      {key:'date_process',label:'Date Process'},
+      {key:'dossier',label:'Dossier'},
+      {key:'nom_client',label:'Agent'},
+      {key:'eta',label:'ETA'},
+      {key:'house',label:'House'},
+      {key:'service',label:'Service'},
+      {key:'ff_total_non_soumis',label:'Total Non Soumis'},
+      {key:'ff_total_soumis',label:'Total Soumis'},
+      {key:'ff_total_tva',label:'Total TVA'},
+      {key:'total_ttc',label:'Total TTC'},
+      {key:'devise',label:'Devise'}
+    ],
     aaSansFacture:[
       {key:'AA_H_Dossier',label:'Dossier'},
       {key:'AA_H_NomClient',label:'Client'},
@@ -1158,7 +1172,12 @@ document.addEventListener('DOMContentLoaded',function(){
       listTitle.textContent=`${baseTitle}${typeLabel} ${monthNamesFull[usedMonth-1]} ${usedYear}`;
     }
     listTableBody.innerHTML='';
-    const columns=key==='generated'?columnSets.freightSummary:(data.columns||columnSets.default);
+    let columns = key==='generated'?columnSets.freightSummary:(data.columns||columnSets.default);
+    // if invoices list and a type filter is provided, choose a matching column set
+    if(key==='invoices'){
+      const t = opts && opts.type ? String(opts.type).toUpperCase() : null;
+      if(t === 'A') columns = columnSets.invoicesAgent;
+    }
     renderColumns(columns);
     let items=data.items||[];
         if(key==='not-stamped'||key==='invoices'){
