@@ -727,21 +727,16 @@ body.chart-only.show-chart-list .list-section {
         <button id="invoices-modal-close" class="modal-close" aria-label="Fermer">✕</button>
       </div>
     </div>
+    <div id="invoices-modal-info" class="modal-info" style="padding:0 20px 10px 20px; font-size:0.95rem; color:var(--text-muted);"></div>
     <div style="overflow:auto;">
       <table class="modal-table" id="invoices-modal-table">
         <thead>
           <tr>
-            <th>Numéro avis</th>
-            <th>Date</th>
-            <th>Dossier</th>
-            <th>Client</th>
-            <th>ETA</th>
-            <th>House</th>
-            <th>Service</th>
-            <th>Total Non Soumis</th>
-            <th>Total Soumis</th>
-            <th>Total TVA</th>
-            <th>Total TTC</th>
+            <th>Devise</th>
+            <th>Montant</th>
+            <th>Montant TVA</th>
+            <th>Montant TTC</th>
+            <th>Montant HT (TND)</th>
           </tr>
         </thead>
         <tbody id="invoices-modal-body"></tbody>
@@ -1964,12 +1959,32 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       const rows = json.details || [];
       invoicesModalTitle.textContent = `Détails — ${inv}`;
+      const infoEl = document.getElementById('invoices-modal-info');
       if(!rows.length){
-        invoicesModalBody.innerHTML = `<tr><td colspan="8">Aucun détail trouvé pour ${inv}</td></tr>`;
+        if(infoEl) infoEl.textContent = '';
+        invoicesModalBody.innerHTML = `<tr><td colspan="5">Aucun détail trouvé pour ${inv}</td></tr>`;
       } else {
+        // Extract entête/context from the first row if present
+        const first = rows[0] || {};
+        const dp = first.date_process ? formatDateValue(first.date_process) : '';
+        const dossier = first.dossier || '';
+        const client = first.nom_client || '';
+        const eta = first.eta || '';
+        const house = first.house || '';
+        const service = first.service || '';
+        if(infoEl){
+          infoEl.innerHTML = `
+            <strong>Dossier:</strong> ${dossier} &nbsp; • &nbsp;
+            <strong>Client:</strong> ${client} &nbsp; • &nbsp;
+            <strong>Date:</strong> ${dp} &nbsp; • &nbsp;
+            <strong>ETA:</strong> ${eta} &nbsp; • &nbsp;
+            <strong>House:</strong> ${house} &nbsp; • &nbsp;
+            <strong>Service:</strong> ${service}
+          `;
+        }
+        // Render detail rows (devise, montant, montant_tva, montant_ttc, montant_ht_tnd)
         invoicesModalBody.innerHTML = rows.map(r=>{
           return `<tr>
-            <td>${r.invoice_num||''}</td>
             <td>${r.devise||''}</td>
             <td>${r.montant!==undefined?formatAmount(r.montant):''}</td>
             <td>${r.montant_tva!==undefined?formatAmount(r.montant_tva):''}</td>
