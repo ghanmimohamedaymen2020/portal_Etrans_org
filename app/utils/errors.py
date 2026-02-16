@@ -1,3 +1,33 @@
+"""Application custom exceptions."""
+
+
+class AppError(Exception):
+    """Base application exception."""
+
+
+class NotFoundError(AppError):
+    def __init__(self, message: str = "Resource not found"):
+        super().__init__(message)
+
+
+class ValidationError(AppError):
+    def __init__(self, message: str = "Validation error"):
+        super().__init__(message)
+
+
+class AuthenticationError(AppError):
+    def __init__(self, message: str = "Authentication failed"):
+        super().__init__(message)
+
+
+class PermissionDeniedError(AppError):
+    def __init__(self, message: str = "Permission denied"):
+        super().__init__(message)
+
+
+class DatabaseError(AppError):
+    def __init__(self, message: str = "Database error"):
+        super().__init__(message)
 class CustomException(Exception):
     """Base class for all custom exceptions."""
     pass

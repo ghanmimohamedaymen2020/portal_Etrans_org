@@ -1411,110 +1411,19 @@ document.addEventListener('DOMContentLoaded',function(){
           // ignore
         }
         
-        // ============================================
-        // MAGASINAGE - SOMME THT (FF_T_TotalNonSoumis)
-        // ============================================
+        // MAGASINAGE KPI neutralized per user request — set zeros and skip API calls
         try {
-          // Récupérer les factures de magasinage du mois
-          const magMonthResp = await fetch(`/api/factures/ff-list?month=${curMonth}&year=${curYear}&type=M`);
-          if (magMonthResp.ok) {
-            const magMonthData = await magMonthResp.json();
-            const magFactures = magMonthData.factures || [];
-
-            // Calculer la somme (FF_T_TotalNonSoumis + FF_T_TotalSoumis) pour le mois
-            let sommeMois = 0;
-            magFactures.forEach(facture => {
-              const non = facture.FF_T_TotalNonSoumis || facture.ff_t_totalnonsoumis || facture.ff_total_non_soumis || facture.total_non_soumis || 0;
-              const soum = facture.FF_T_TotalSoumis || facture.ff_t_totalsoumis || facture.ff_total_soumis || facture.total_soumis || 0;
-              sommeMois += Number(non || 0) + Number(soum || 0);
-            });
-
-            // Afficher la somme dans la carte principale et la sous-valeur mois
-            setKpiValue('invoices-magasinage', formatAmount(sommeMois) + ' TND');
-            setKpiValue('invoices-magasinage-tht-month', formatAmount(sommeMois) + ' TND');
-          } else {
-            console.warn('API Magasinage mois non disponible');
-            setKpiValue('invoices-magasinage', '0 TND');
-            setKpiValue('invoices-magasinage-tht-month', '0 TND');
-          }
-
-          // Récupérer les factures de magasinage de l'année
-          const magYearResp = await fetch(`/api/factures/ff-list?year=${curYear}&type=M`);
-          if (magYearResp.ok) {
-            const magYearData = await magYearResp.json();
-            const magFacturesYear = magYearData.factures || [];
-
-            // Calculer la somme (FF_T_TotalNonSoumis + FF_T_TotalSoumis) pour l'année
-            let sommeAnnee = 0;
-            magFacturesYear.forEach(facture => {
-              const non = facture.FF_T_TotalNonSoumis || facture.ff_t_totalnonsoumis || facture.total_non_soumis || facture.ff_total_non_soumis || 0;
-              const soum = facture.FF_T_TotalSoumis || facture.ff_t_totalsoumis || facture.total_soumis || facture.ff_total_soumis || 0;
-              sommeAnnee += Number(non || 0) + Number(soum || 0);
-            });
-
-            setKpiValue('invoices-magasinage-tht-year', formatAmount(sommeAnnee) + ' TND');
-          } else {
-            console.warn('API Magasinage année non disponible');
-            setKpiValue('invoices-magasinage-tht-year', '0 TND');
-          }
-        } catch(e) {
-          console.error('Erreur chargement THT Magasinage:', e);
           setKpiValue('invoices-magasinage', '0 TND');
           setKpiValue('invoices-magasinage-tht-month', '0 TND');
           setKpiValue('invoices-magasinage-tht-year', '0 TND');
-        }
+        } catch(e) { console.error('Error setting magasinage KPI to zero', e); }
         
-        // ============================================
-        // SURESTARIE - SOMME (ff_total_non_soumis + ff_total_soumis)
-        // ============================================
+        // SURESTARIE KPI neutralized per user request — set zeros and skip API calls
         try {
-          // Récupérer les factures de surestarie du mois
-          const sureMonthResp = await fetch(`/api/factures/ff-list?month=${curMonth}&year=${curYear}&type=S`);
-          if (sureMonthResp.ok) {
-            const sureMonthData = await sureMonthResp.json();
-            const sureFactures = sureMonthData.factures || [];
-
-            // Calculer la somme (ff_total_non_soumis + ff_total_soumis) pour le mois
-            let sommeMois = 0;
-            sureFactures.forEach(facture => {
-              const non = facture.ff_total_non_soumis ?? facture.FF_T_TotalNonSoumis ?? facture.ff_t_totalnonsoumis ?? facture.total_non_soumis ?? 0;
-              const soum = facture.ff_total_soumis ?? facture.FF_T_TotalSoumis ?? facture.ff_t_totalsoumis ?? facture.total_soumis ?? 0;
-              sommeMois += Number(non || 0) + Number(soum || 0);
-            });
-
-            setKpiValue('invoices-surestarie', formatAmount(sommeMois) + ' TND');
-            setKpiValue('invoices-surestarie-tht-month', formatAmount(sommeMois) + ' TND');
-          } else {
-            console.warn('API Surestarie mois non disponible');
-            setKpiValue('invoices-surestarie', '0 TND');
-            setKpiValue('invoices-surestarie-tht-month', '0 TND');
-          }
-
-          // Récupérer les factures de surestarie de l'année
-          const sureYearResp = await fetch(`/api/factures/ff-list?year=${curYear}&type=S`);
-          if (sureYearResp.ok) {
-            const sureYearData = await sureYearResp.json();
-            const sureFacturesYear = sureYearData.factures || [];
-
-            // Calculer la somme pour l'année
-            let sommeAnnee = 0;
-            sureFacturesYear.forEach(facture => {
-              const non = facture.ff_total_non_soumis ?? facture.FF_T_TotalNonSoumis ?? facture.ff_t_totalnonsoumis ?? facture.total_non_soumis ?? 0;
-              const soum = facture.ff_total_soumis ?? facture.FF_T_TotalSoumis ?? facture.ff_t_totalsoumis ?? facture.total_soumis ?? 0;
-              sommeAnnee += Number(non || 0) + Number(soum || 0);
-            });
-
-            setKpiValue('invoices-surestarie-tht-year', formatAmount(sommeAnnee) + ' TND');
-          } else {
-            console.warn('API Surestarie année non disponible');
-            setKpiValue('invoices-surestarie-tht-year', '0 TND');
-          }
-        } catch(e) {
-          console.error('Erreur chargement Surestarie:', e);
           setKpiValue('invoices-surestarie', '0 TND');
           setKpiValue('invoices-surestarie-tht-month', '0 TND');
           setKpiValue('invoices-surestarie-tht-year', '0 TND');
-        }
+        } catch(e) { console.error('Error setting surestarie KPI to zero', e); }
         
         // ============================================
         // FREIGHT - Totaux mensuel et annuel
@@ -1536,16 +1445,8 @@ document.addEventListener('DOMContentLoaded',function(){
             console.error('Erreur chargement Freight:', e);
           }
 
-        // Précharger les données mensuelles d'activité utilisées par le graphique
-        try{
-          const maResp = await fetch(`/api/factures/ff-monthly-activity`);
-          if(maResp.ok){
-            const maJson = await maResp.json();
-            window.monthlyActivityCache = maJson.categories || maJson.current || (maJson.activities && maJson.activities.current) || {};
-          }
-        }catch(e){
-          // ignore preload errors
-        }
+        // Monthly activity reporting removed by user request — use empty cache
+        window.monthlyActivityCache = {};
         
       } catch(e) {
         console.error('Erreur globale initKpiCounts:', e);
@@ -1916,132 +1817,104 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function loadMonthlyTurnover(){
     try{
-      let categories = null;
-      if(window.monthlyActivityCache){
-        categories = window.monthlyActivityCache;
-      }else{
-        const response=await fetch('/api/factures/ff-monthly-activity');
-        const data=await response.json();
-        if(!response.ok){
-          throw new Error(data.error||'Erreur API');
-        }
-        categories = data.categories || data.current || (data.activities&&data.activities.current) || {};
-        window.monthlyActivityCache = categories;
-      }
+      const curYear = new Date().getFullYear();
+      const resp = await fetch(`/api/factures/annual-summary?year=${curYear}`);
+      const data = await resp.json();
+      if(!resp.ok) throw new Error(data.error || 'Erreur API annual-summary');
 
-      // Robust conversion to numeric month values (handles numbers, strings, or objects {source, parsedValue})
-      function toNumber(val){
-        if(val===null||typeof val==='undefined') return 0;
-        if(typeof val === 'number') return val;
-        if(typeof val === 'string'){
-          const n = Number(val.replace(/[^0-9\,\.\-]/g,'').replace(/,/g,'.'));
-          return Number.isFinite(n)?n:0;
-        }
-        if(typeof val === 'object'){
-          if('parsedValue' in val) return Number(val.parsedValue)||0;
-          if('source' in val) return Number(String(val.source).replace(/,/g,'.'))||0;
-          try{ const n = Number(val); return Number.isFinite(n)?n:0; }catch(e){ return 0; }
-        }
-        const n = Number(val);
-        return Number.isFinite(n)?n:0;
-      }
+      const rows = data.rows || [];
+      const timbrage = new Array(12).fill(0);
+      const magasinage = new Array(12).fill(0);
+      const surestarie = new Array(12).fill(0);
+      const agent_by_currency = {}; // currency -> array[12]
+      const annual_totals = {}; // type -> { cur -> total }
 
-      // Ensure arrays of length 12
-      function ensureMonthlyArray(arr){
-        const out = new Array(12).fill(0);
-        if(!Array.isArray(arr)) return out;
-        for(let i=0;i<12;i++) out[i] = toNumber(arr[i]);
-        return out;
-      }
-
-      // Reset primary series
-      datasets.timbrage.data = new Array(12).fill(0);
-      datasets.magasinage.data = new Array(12).fill(0);
-      datasets.surestarie.data = new Array(12).fill(0);
-      datasets.agent_currencies = [];
-
-      // Compute monthly series using the same logic as KPI cards:
-      // - Timbrage/Magasinage/Surestarie: use `/api/factures/ca-activite-total` per month
-      // - Agent: use `/api/factures/agent-totals` per month (provides EUR/USD)
-      // Do the 12 months in parallel and fall back safely on any error.
-      try{
-        const curYear = new Date().getFullYear();
-        const monthReqs = [];
-        for(let m=1;m<=12;m++){
-          monthReqs.push(Promise.all([
-            fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${m}&type=T`).then(r=> r.ok? r.json() : { total_soumis:0, total_non_soumis:0 }).catch(()=>({ total_soumis:0, total_non_soumis:0 })),
-            fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${m}&type=M`).then(r=> r.ok? r.json() : { total_soumis:0, total_non_soumis:0 }).catch(()=>({ total_soumis:0, total_non_soumis:0 })),
-            fetch(`/api/factures/ca-activite-total?year=${curYear}&month=${m}&type=S`).then(r=> r.ok? r.json() : { total_soumis:0, total_non_soumis:0 }).catch(()=>({ total_soumis:0, total_non_soumis:0 })),
-            fetch(`/api/factures/agent-totals?year=${curYear}&month=${m}`).then(r=> r.ok? r.json() : { totals:{} }).catch(()=>({ totals:{} }))
-          ]));
-        }
-        const months = await Promise.all(monthReqs);
-        const timbrageMonths = months.map(r => Number(r[0].total_soumis||0) + Number(r[0].total_non_soumis||0));
-        const magasinageMonths = months.map(r => Number(r[1].total_soumis||0) + Number(r[1].total_non_soumis||0));
-        const surestarieMonths = months.map(r => Number(r[2].total_soumis||0) + Number(r[2].total_non_soumis||0));
-        const agentEUR = months.map(r => Number((r[3].totals && r[3].totals.EUR) || 0));
-        const agentUSD = months.map(r => Number((r[3].totals && r[3].totals.USD) || 0));
-
-        datasets.timbrage.data = timbrageMonths;
-        datasets.magasinage.data = magasinageMonths;
-        datasets.surestarie.data = surestarieMonths;
-        // Build Agent per-currency datasets (preserve existing palette ordering)
-        const palette = ['#f39c12','#9b59b6','#1abc9c'];
-        datasets.agent_currencies = [];
-        datasets.agent_currencies.push({ label: 'Agent - EUR', data: agentEUR, backgroundColor: palette[0] });
-        datasets.agent_currencies.push({ label: 'Agent - USD', data: agentUSD, backgroundColor: palette[1] });
-      }catch(e){
-        console.warn('Erreur chargement CA mensuel via ca-activite-total/agent-totals', e);
-      }
-
-      const palette = ['#3498db','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#34495e','#e67e22'];
-      let colorIndex = 0;
-
-      // Populate category series and collect agent currency series
-      Object.keys(categories).forEach(key=>{
-        const arr = ensureMonthlyArray(categories[key]);
-        const first = (key||'').toString().trim().charAt(0).toUpperCase();
-        if(first === 'T'){
-          datasets.timbrage.data = arr;
-        } else if(first === 'M'){
-          datasets.magasinage.data = arr;
-        } else if(first === 'S'){
-          datasets.surestarie.data = arr;
-        } else if(first === 'A'){
-          // Agent per-currency, label like 'A - USD' -> present as 'Agent - USD'
-          const parts = key.split('-').map(s=>s.trim());
-          const currency = parts.length>1?parts[1].toUpperCase():'TND';
-          const label = `Agent - ${currency}`;
-          datasets.agent_currencies.push({
-            label: label,
-            data: arr,
-            backgroundColor: palette[(colorIndex++)%palette.length]
-          });
+      rows.forEach(r=>{
+        const type = (r.type_facture||'').toString().trim();
+        const mois = Number(r.mois||0);
+        const devise = (r.devise||'TND').toString();
+        const total = Number(r.total||0);
+        if(mois === 0){
+          if(!annual_totals[type]) annual_totals[type] = {};
+          annual_totals[type][devise] = (annual_totals[type][devise]||0) + total;
         } else {
-          // unknown category: append as custom dataset
-          datasets.agent_currencies.push({
-            label: key,
-            data: arr,
-            backgroundColor: palette[(colorIndex++)%palette.length]
-          });
+          if(type === 'A'){
+            if(!agent_by_currency[devise]) agent_by_currency[devise] = new Array(12).fill(0);
+            agent_by_currency[devise][mois-1] += total;
+          } else if(type === 'T'){
+            timbrage[mois-1] += total;
+          } else if(type === 'M'){
+            magasinage[mois-1] += total;
+          } else if(type === 'S'){
+            surestarie[mois-1] += total;
+          }
         }
       });
 
-      // Compute total as sum across all categories per month
-      const totals = new Array(12).fill(0);
-      Object.keys(categories).forEach(k=>{
-        const a = ensureMonthlyArray(categories[k]);
-        for(let i=0;i<12;i++) totals[i] += Number(a[i]||0);
+      datasets.timbrage.data = timbrage;
+      datasets.magasinage.data = magasinage;
+      datasets.surestarie.data = surestarie;
+
+      // Build agent currency datasets
+      datasets.agent_currencies = [];
+      const paletteLocal = ['#f39c12','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71','#34495e'];
+      let pi = 0;
+      Object.keys(agent_by_currency).forEach(cur=>{
+        datasets.agent_currencies.push({
+          label: `Agent - ${cur}`,
+          data: agent_by_currency[cur].slice(0,12),
+          backgroundColor: paletteLocal[(pi++)%paletteLocal.length]
+        });
       });
+
+      // compute current-month totals for KPI cards (use monthly series, not annual)
+      const sum = arr => Array.isArray(arr)? arr.reduce((a,b)=>a+Number(b||0),0):0;
+      const curMonthIndex = new Date().getMonth(); // 0-based
+      const magCurrent = Number(magasinage[curMonthIndex]||0);
+      const surCurrent = Number(surestarie[curMonthIndex]||0);
+      const timbrageCurrent = Number(timbrage[curMonthIndex]||0);
+
+      // Agent totals per currency for current month
+      const agentTotals = {};
+      if(Object.keys(agent_by_currency).length){
+        Object.keys(agent_by_currency).forEach(cur=>{ agentTotals[cur] = Number(agent_by_currency[cur][curMonthIndex]||0); });
+      } else if(annual_totals['A']){
+        // fallback: if only annual totals available, approximate by dividing by 12
+        Object.entries(annual_totals['A']).forEach(([cur,v])=>{ agentTotals[cur]=Number((v||0)/12); });
+      }
+
+      // update KPI DOM with current month values
+      setKpiValue('invoices-magasinage', formatAmount(magCurrent) + ' TND');
+      setKpiValue('invoices-magasinage-tht-month', formatAmount(magCurrent) + ' TND');
+      setKpiValue('invoices-magasinage-tht-year', formatAmount(magCurrent) + ' TND');
+
+      setKpiValue('invoices-surestarie', formatAmount(surCurrent) + ' TND');
+      setKpiValue('invoices-surestarie-tht-month', formatAmount(surCurrent) + ' TND');
+      setKpiValue('invoices-surestarie-tht-year', formatAmount(surCurrent) + ' TND');
+
+      // set Timbrage invoice KPI (main invoices card) to current month timbrage
+      setKpiValue('invoices', formatAmount(timbrageCurrent) + ' TND');
+
+      // agent small KPI elements (EUR/USD) if present — show current month
+      const eurEl = document.querySelector('[data-kpi-value="agent-eur"]');
+      const usdEl = document.querySelector('[data-kpi-value="agent-usd"]');
+      if(eurEl) eurEl.textContent = formatAmount(agentTotals['EUR']||0) + ' EUR';
+      if(usdEl) usdEl.textContent = formatAmount(agentTotals['USD']||0) + ' USD';
+
+      // compute totals dataset (sum of TND categories only)
+      const totals = new Array(12).fill(0);
+      for(let i=0;i<12;i++){
+        totals[i] = Number(timbrage[i]||0) + Number(magasinage[i]||0) + Number(surestarie[i]||0);
+      }
       datasets.total.data = totals;
 
-      // apply currently selected mode
-      applyCAMode(document.getElementById('ca-mode-select').value);
-    }catch(err){
-      console.error('Erreur chargement CA mensuel:',err);
+      applyCAMode(document.getElementById('ca-mode-select')?.value || 'total');
+    }catch(e){
+      console.error('Erreur chargement CA mensuel:', e);
     }
   }
 
+  // trigger the (now-stubbed) loader to initialize empty chart state
   loadMonthlyTurnover();
 
   // Invoices modal logic

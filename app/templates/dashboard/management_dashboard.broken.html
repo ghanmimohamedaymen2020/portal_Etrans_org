@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Management - E-Trans{% endblock %}
+
+{% block css %}
+</style>
+{% endblock %}
+
+{% block content %}
+
+            <th>Total Non Soumis</th>
+  --color-secondary: #3498db;
+  --color-success: #27ae60;
+  --color-warning: #e67e22;
+  --color-danger: #e74c3c;
+  --color-info: #3498db;
+  --color-light: #f8f9fa;
+  --color-dark: #2c3e50;
+  --color-border: #e0e0e0;
+  --border-radius: 10px;
+  --box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+  --transition: all 0.3s ease;
+}
+
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 15px;
+  box-shadow: var(--box-shadow);
+  padding: 8px 24px 0 24px;
+  height: auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+body.list-only main {
+  max-width: 100%;
+  width: 100%;
+  min-height: calc(100vh - 81px);
+  height: calc(100vh - 81px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+body.list-only .list-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  padding: 18px;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.list-only .list-section table {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+body.list-only main {
+  padding: 12px 18px;
+}
+
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: 2px solid var(--color-border);
+  }
+
+.welcome-section h1 {
+  color: var(--color-primary);
+  font-size: 1.8rem;
+  margin-bottom: 5px;
+}
+
+.welcome-message {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.kpi-section {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin: 8px 0 8px;
+  align-items: stretch;
+  /* Make KPI row span the full browser width */
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  box-sizing: border-box;
+  padding-left: 24px; /* match main horizontal padding */
+  padding-right: 24px;
+}
+
+.kpi-card {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 8px 10px;
+  box-shadow: var(--box-shadow);
+  border-left: 5px solid var(--color-primary);
+  transition: var(--transition);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.kpi-card:hover {
+  transform: translateY(-4px);
+}
+
+.kpi-card.active {
+  border-left-width: 8px;
+}
+
+.kpi-title {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
+.kpi-sub {
+  font-size: 0.85rem;
+  color: #777;
+}
+
+/* inline KPI numbers used inside kpi-sub (smaller than main .kpi-value but enlarged) */
+.kpi-value-inline {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.list-section {
+  display: none;
+  background: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 8px 10px;
+  margin-bottom: 0;
+  border: 1px solid var(--color-border);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Ensure the list-section fills available space */
+  height: 100%;
+  max-height: calc(100vh - 120px);
+}
+
+body.list-only .list-section {
+  display: block;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 4px;
+}
+
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-loading {
+  display: none;
+  font-size: 0.85rem;
+  color: #666;
+  align-items: center;
+  gap: 2px;
+}
+
+.list-loading.visible {
+  display: inline-flex;
+}
+
+.list-page-size {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.list-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-page-btn {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.list-page-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.list-page-info {
+  font-size: 0.85rem;
+  color: #666;
+  min-width: 90px;
+  text-align: center;
+}
+
+.list-search {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  min-width: 220px;
+}
+
+.list-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.list-table {
+width: 100%;
+  border-collapse: collapse;
+}
+
+.table-responsive-taux {
+  max-height: 400px;   /* hauteur du scroll */
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.list-table th,
+.list-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.list-table th {
+  color: #666;
+  font-weight: 600;
+  background: #f8f9fa;
+}
+
+/* Sortable header styles */
+.list-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.list-table th.sortable::after {
+  content: '';
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+.list-table th.sortable.sort-asc::after { content: '▲'; }
+.list-table th.sortable.sort-desc::after { content: '▼'; }
+
+.table-responsive {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: block;
+  height: 95%;
+  max-height: 100%;
+}
+
+.list-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8f9fa;
+}
+
+.column-toggle {
+  position: relative;
+}

@@ -1,0 +1,40 @@
+{
+  "rows": [
+    {
+      "total_ht": 80863.43,
+      "total_soumis": 80863.43,
+      "total_ttc": 80863.43,
+      "total_tva": 0.0,
+      "type_service": "A - EUR"
+    },
+    {
+      "total_ht": 4071.58,
+      "total_soumis": 4071.58,
+      "total_ttc": 4071.58,
+      "total_tva": 0.0,
+      "type_service": "A - USD"
+    },
+    {
+      "total_ht": 72923.073,
+      "total_soumis": 72923.072,
+      "total_ttc": 86608.813,
+      "total_tva": 13685.74,
+      "type_service": "M"
+    },
+    {
+      "total_ht": 143299.509,
+      "total_soumis": 143299.509,
+      "total_ttc": 170526.427,
+      "total_tva": 27226.918,
+      "type_service": "S"
+    },
+    {
+      "total_ht": 2560765.698,
+      "total_soumis": 1149217.384,
+      "total_ttc": 2645356.656,
+      "total_tva": 84440.958,
+      "type_service": "T"
+    }
+  ],
+  "year": 2026
+}

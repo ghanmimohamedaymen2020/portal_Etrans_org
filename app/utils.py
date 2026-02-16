@@ -81,3 +81,40 @@ def send_email(recipient, subject, body, html=None):
     except Exception as e:
         print(f"Erreur lors de l'envoi d'email: {e}")
         return False
+
+
+def get_agent_monthly_by_year(db, year: int):
+    """Backward-compatible wrapper: monthly series per currency for Agent invoices (type 'A').
+
+    Uses `get_invoice_monthly_and_annual` under the hood and returns only the
+    `series` part (dict currency -> 12-element list).
+    """
+    # Calculation removed by request. Return empty series to disable agent monthly CA.
+    return {}
+
+
+def get_agent_totals_for_month(db, year: int, month: int):
+    """Return totals per currency for a specific month/year for Agent invoices.
+
+    Returns a dict mapping currency codes to float totals. This wrapper uses
+    `get_invoice_monthly_and_annual` to compute values.
+    """
+    # Calculation removed by request. Return empty totals.
+    return {}
+
+
+def get_invoice_monthly_and_annual(db, year: int, invoice_type: str | None = None):
+    """Return monthly series and annual totals per currency for invoices.
+
+    This single function serves both the monthly histogram (series) and the
+    annual total (sum of the 12 months). It returns a dict with two keys:
+
+    - 'series': { 'EUR': [12 floats], 'USD': [12 floats], ... }
+    - 'totals': { 'EUR': float, 'USD': float, ... }
+
+    Parameters:
+    - `invoice_type`: if provided (e.g. 'A'), filter by
+      `UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = :invoice_type`.
+    """
+    # Calculation removed by request. Return empty series and totals.
+    return {'series': {}, 'totals': {}}

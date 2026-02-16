@@ -3,6 +3,7 @@ import io
 import csv
 from flask_login import login_required, current_user
 from app import db
+from app.utils import get_agent_monthly_by_year, get_agent_totals_for_month, get_invoice_monthly_and_annual
 from app.models import Dossier, AvisArrivee, User
 from app.utils import token_required
 from app.routes import api_bp
@@ -485,71 +486,8 @@ def get_ca_par_activite():
     # FF_D_MontantHT_TND may be missing; we'll fall back to (TotalTTC - TotalTVA)
     required_detail = {'FF_D_NumFact', 'FF_D_Devise', 'FF_D_Montant', 'FF_D_MontantTVA', 'FF_D_MontantTTC'}
 
-    try:
-        entete_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Entete'
-        """)).scalars().all()
-        detail_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Detail'
-        """)).scalars().all()
-
-        entete_set = {c for c in entete_cols}
-        detail_set = {c for c in detail_cols}
-
-        missing = []
-        if not required_entete.issubset(entete_set):
-            missing.extend(sorted(required_entete - entete_set))
-        if not required_detail.issubset(detail_set):
-            missing.extend(sorted(required_detail - detail_set))
-        if missing:
-            return jsonify({'error': 'Colonnes manquantes', 'missing': missing}), 500
-
-        sql = text("""
-            SELECT
-                CASE
-                    WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
-                        THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
-                    ELSE H.FF_H_TypeFacture
-                END AS TypeService,
-                    SUM(ISNULL(D.FF_D_MontantHT_TND, ISNULL(D.FF_D_MontantTTC,0) - ISNULL(D.FF_D_MontantTVA,0))) AS Total_HT,
-                SUM(ISNULL(D.FF_D_Montant,0)) AS Total_Soumis,
-                SUM(ISNULL(D.FF_D_MontantTVA,0)) AS Total_TVA,
-                SUM(ISNULL(D.FF_D_MontantTTC,0)) AS Total_TTC
-            FROM [dbo].[View_FF_Entete] H
-            INNER JOIN [dbo].[View_FF_Detail] D
-                ON H.FF_H_NumFact = D.FF_D_NumFact
-            WHERE UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) IN ('T','S','A','M')
-              AND YEAR(H.FF_H_DateProcess) = :year
-              """ + (" AND MONTH(H.FF_H_DateProcess) = :month" if month else "") + """
-            GROUP BY
-                CASE
-                    WHEN UPPER(LTRIM(RTRIM(H.FF_H_TypeFacture))) = 'A'
-                        THEN H.FF_H_TypeFacture + ' - ' + D.FF_D_Devise
-                    ELSE H.FF_H_TypeFacture
-                END
-            ORDER BY TypeService
-        """)
-
-        params = {'year': year}
-        if month:
-            params['month'] = month
-
-        rows = db.session.execute(sql, params).mappings().all()
-        results = []
-        for r in rows:
-            results.append({
-                'type_service': r.get('TypeService'),
-                'total_ht': float(r.get('Total_HT') or 0),
-                'total_soumis': float(r.get('Total_Soumis') or 0),
-                'total_tva': float(r.get('Total_TVA') or 0),
-                'total_ttc': float(r.get('Total_TTC') or 0)
-            })
-
-        return jsonify({'year': year, 'rows': results})
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+    # CA by activity calculations removed by user request — return empty rows.
+    return jsonify({'year': year, 'rows': []})
 
 
 @api_bp.route('/factures/ca-activite-total', methods=['GET'])
@@ -565,210 +503,8 @@ def get_ca_activite_total():
         from datetime import datetime
         year = datetime.utcnow().year
 
-    try:
-        # Inspect available columns
-        entete_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Entete'
-        """)).scalars().all()
-        detail_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Detail'
-        """)).scalars().all()
-        total_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Total'
-        """)).scalars().all()
-
-        entete_set = {c for c in entete_cols}
-        detail_set = {c for c in detail_cols}
-        total_set = {c for c in total_cols}
-
-        # build filters
-        params = {'year': year}
-        # use the same date coalescing as ff-monthly-activity: prefer AA date, then freight, then entete
-        month_clause = ''
-        if month:
-            month_clause = ' AND MONTH(COALESCE(a.AA_H_DateProcess, f.FF_H_DateProcess, e.FF_H_DateProcess)) = :month'
-            params['month'] = month
-        type_clause = ''
-        if req_type:
-            # choose the available column name for type
-            if 'FF_H_TypeFacture' in entete_set:
-                type_col = 'FF_H_TypeFacture'
-            elif 'FF_H_TypeFactRect' in entete_set:
-                type_col = 'FF_H_TypeFactRect'
-            else:
-                type_col = None
-            if type_col:
-                type_clause = f" AND UPPER(LTRIM(RTRIM(e.{type_col}))) = :type"
-                params['type'] = str(req_type).upper()
-
-        # If View_FF_Total exists with totals, prefer it for soumis/non_soumis
-        totals_by_type = {}
-        # check if freight view exists to use its process date for month filtering
-        freight_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FREIGHT_TND'
-        """)).scalars().all()
-        freight_set = {c for c in freight_cols}
-        has_freight = bool(freight_cols)
-        if {'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'}.issubset(total_set):
-            if has_freight:
-                sql_tot = text(f"""
-                    SELECT
-                      SUM(COALESCE(ff.FF_T_TotalNonSoumis,0)) AS Total_NonSoumis,
-                      SUM(COALESCE(ff.FF_T_TotalSoumis,0)) AS Total_Soumis,
-                      SUM(COALESCE(ff.FF_T_TotalTVA,0)) AS Total_TVA,
-                      SUM(COALESCE(ff.FF_T_TotalTTC,0)) AS Total_TTC
-                    FROM [dbo].[View_FF_Total] ff
-                    INNER JOIN [dbo].[View_FREIGHT_TND] f ON ff.FF_T_NumFact = f.FF_D_NumFact
-                    LEFT JOIN [dbo].[View_FF_Entete] e ON ff.FF_T_NumFact = e.FF_H_NumFact
-                    LEFT JOIN [dbo].[View_AA_AvecFacture] a ON a.AA_H_NumFacture = ff.FF_T_NumFact
-                    WHERE YEAR(COALESCE(a.AA_H_DateProcess, f.FF_H_DateProcess, e.FF_H_DateProcess)) = :year {month_clause} {type_clause}
-                """)
-                row = db.session.execute(sql_tot, params).mappings().first() or {}
-                if req_type:
-                    totals_by_type[req_type.upper()] = {
-                        'total_non_soumis': float(row.get('Total_NonSoumis') or 0),
-                        'total_soumis': float(row.get('Total_Soumis') or 0),
-                        'total_tva': float(row.get('Total_TVA') or 0),
-                        'total_ttc': float(row.get('Total_TTC') or 0),
-                        'total_ht': 0.0
-                    }
-                else:
-                    sql_group = text(f"""
-                        SELECT UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) AS TypeService,
-                          SUM(COALESCE(ff.FF_T_TotalNonSoumis,0)) AS Total_NonSoumis,
-                          SUM(COALESCE(ff.FF_T_TotalSoumis,0)) AS Total_Soumis
-                        FROM [dbo].[View_FF_Total] ff
-                        INNER JOIN [dbo].[View_FREIGHT_TND] f ON ff.FF_T_NumFact = f.FF_D_NumFact
-                        LEFT JOIN [dbo].[View_FF_Entete] e ON ff.FF_T_NumFact = e.FF_H_NumFact
-                        LEFT JOIN [dbo].[View_AA_AvecFacture] a ON a.AA_H_NumFacture = ff.FF_T_NumFact
-                        WHERE YEAR(COALESCE(a.AA_H_DateProcess, f.FF_H_DateProcess, e.FF_H_DateProcess)) = :year {month_clause}
-                        GROUP BY UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture)))
-                    """)
-                    rows = db.session.execute(sql_group, params).mappings().all()
-                    for r in rows:
-                        totals_by_type[r.get('TypeService')] = {
-                            'total_non_soumis': float(r.get('Total_NonSoumis') or 0),
-                            'total_soumis': float(r.get('Total_Soumis') or 0),
-                            'total_tva': 0.0,
-                            'total_ttc': 0.0,
-                            'total_ht': 0.0
-                        }
-            else:
-                sql_tot = text(f"""
-                    SELECT
-                        CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + ISNULL(d.FF_D_Devise,'') ELSE e.FF_H_TypeFacture END AS TypeService,
-                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis)) AS Total_NonSoumis,
-                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis)) AS Total_Soumis,
-                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalTVA)) AS Total_TVA,
-                        SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalTTC)) AS Total_TTC
-                    FROM [dbo].[View_FF_Entete] e
-                    LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact
-                    LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
-                    LEFT JOIN [dbo].[View_AA_AvecFacture] a ON a.AA_H_NumFacture = e.FF_H_NumFact
-                    WHERE YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year {month_clause} {type_clause}
-                    GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + ISNULL(d.FF_D_Devise,'') ELSE e.FF_H_TypeFacture END
-                """)
-                rows = db.session.execute(sql_tot, params).mappings().all()
-                for r in rows:
-                    totals_by_type[r.get('TypeService')] = {
-                        'total_non_soumis': float(r.get('Total_NonSoumis') or 0),
-                        'total_soumis': float(r.get('Total_Soumis') or 0),
-                        'total_tva': float(r.get('Total_TVA') or 0),
-                        'total_ttc': float(r.get('Total_TTC') or 0),
-                        'total_ht': 0.0  # will fill from detail query
-                    }
-
-        # compute reliable Total_HT from details (fallback if missing)
-        if {'FF_D_NumFact', 'FF_D_MontantTTC', 'FF_D_MontantTVA'}.issubset(detail_set):
-            sql_ht = text(f"""
-                SELECT
-                    CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END AS TypeService,
-                    SUM(ISNULL(d.FF_D_MontantHT_TND, ISNULL(d.FF_D_MontantTTC,0) - ISNULL(d.FF_D_MontantTVA,0))) AS Total_HT
-                FROM [dbo].[View_FF_Entete] e
-                LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
-                WHERE YEAR(e.FF_H_DateProcess) = :year {month_clause} {type_clause}
-                GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END
-            """)
-            rows_ht = db.session.execute(sql_ht, params).mappings().all()
-            for r in rows_ht:
-                key = r.get('TypeService')
-                if key not in totals_by_type:
-                    totals_by_type[key] = {
-                        'total_non_soumis': 0.0,
-                        'total_soumis': 0.0,
-                        'total_tva': 0.0,
-                        'total_ttc': 0.0,
-                        'total_ht': float(r.get('Total_HT') or 0)
-                    }
-                else:
-                    totals_by_type[key]['total_ht'] = float(r.get('Total_HT') or 0)
-
-        # If totals_by_type is empty (no View_FF_Total), attempt to compute from details
-        if not totals_by_type:
-            # aggregate from details as best-effort
-            if {'FF_D_NumFact', 'FF_D_Montant'}.issubset(detail_set):
-                sql_fallback = text(f"""
-                    SELECT
-                        CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END AS TypeService,
-                        SUM(ISNULL(d.FF_D_MontantHT_TND, ISNULL(d.FF_D_MontantTTC,0) - ISNULL(d.FF_D_MontantTVA,0))) AS Total_HT,
-                        SUM(ISNULL(d.FF_D_Montant,0)) AS Total_Soumis,
-                        SUM(ISNULL(d.FF_D_MontantTVA,0)) AS Total_TVA,
-                        SUM(ISNULL(d.FF_D_MontantTTC,0)) AS Total_TTC
-                    FROM [dbo].[View_FF_Entete] e
-                    LEFT JOIN [dbo].[View_FF_Detail] d ON d.FF_D_NumFact = e.FF_H_NumFact
-                    WHERE YEAR(e.FF_H_DateProcess) = :year {month_clause} {type_clause}
-                    GROUP BY CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A' THEN e.FF_H_TypeFacture + ' - ' + d.FF_D_Devise ELSE e.FF_H_TypeFacture END
-                """)
-                rows_fb = db.session.execute(sql_fallback, params).mappings().all()
-                for r in rows_fb:
-                    totals_by_type[r.get('TypeService')] = {
-                        'total_ht': float(r.get('Total_HT') or 0),
-                        'total_soumis': float(r.get('Total_Soumis') or 0),
-                        'total_non_soumis': 0.0,
-                        'total_tva': float(r.get('Total_TVA') or 0),
-                        'total_ttc': float(r.get('Total_TTC') or 0)
-                    }
-
-        # prepare response
-        if req_type:
-            # return single aggregate for requested type
-            # the request type may be stored as 'T' or as the 'A - X' form; try to find matching key
-            key_match = None
-            t_upper = str(req_type).upper()
-            for k in totals_by_type.keys():
-                if k and k.upper().startswith(t_upper):
-                    key_match = k
-                    break
-            if not key_match:
-                # return zeros if not found
-                return jsonify({'year': year, 'month': month, 'type': req_type,
-                                'total_ht': 0.0, 'total_soumis': 0.0, 'total_non_soumis': 0.0,
-                                'total_tva': 0.0, 'total_ttc': 0.0})
-            vals = totals_by_type[key_match]
-            return jsonify({'year': year, 'month': month, 'type': req_type,
-                            'total_ht': vals.get('total_ht', 0.0),
-                            'total_soumis': vals.get('total_soumis', 0.0),
-                            'total_non_soumis': vals.get('total_non_soumis', 0.0),
-                            'total_tva': vals.get('total_tva', 0.0),
-                            'total_ttc': vals.get('total_ttc', 0.0)})
-
-        # otherwise return dict by type
-        out = []
-        for k, v in totals_by_type.items():
-            out.append({'type_service': k,
-                        'total_ht': v.get('total_ht', 0.0),
-                        'total_soumis': v.get('total_soumis', 0.0),
-                        'total_non_soumis': v.get('total_non_soumis', 0.0),
-                        'total_tva': v.get('total_tva', 0.0),
-                        'total_ttc': v.get('total_ttc', 0.0)})
-
-        return jsonify({'year': year, 'month': month, 'rows': out})
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+    # CA-activite-total calculations removed by user request — return empty.
+    return jsonify({'year': year, 'month': month, 'rows': []})
 
 
 @api_bp.route('/factures/agent-totals', methods=['GET'])
@@ -802,25 +538,49 @@ def get_agent_totals():
         if 'FF_H_TypeFacture' not in entete_cols or 'FF_H_NumFact' not in entete_cols or 'FF_H_DateProcess' not in entete_cols:
             return jsonify({'error':'Colonnes manquantes dans View_FF_Entete','missing': []}), 500
 
+        # use shared helper to ensure same logic as monthly histogram
+        totals = get_agent_totals_for_month(db, year, month)
+        return jsonify({'year': year, 'month': month, 'totals': totals})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/agent-tnd-monthly', methods=['GET'])
+@login_required
+def get_agent_tnd_monthly():
+    """Retourne la somme mensuelle des factures Agent en TND pour une année donnée.
+    Params: year (opt). Retourne un tableau de 12 valeurs (mois 1..12) en TND.
+    Utilise la vue `View_FREIGHT_TND` si disponible.
+    """
+    year = request.args.get('year', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    try:
+        # check if View_FREIGHT_TND exists
+        view_exists = db.session.execute(text("""
+            SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FREIGHT_TND'
+        """)).fetchone() is not None
+
+        if not view_exists:
+            return jsonify({'error': 'View_FREIGHT_TND not available on DB; cannot compute TND totals.'}), 404
+
         sql = text("""
-            SELECT d.FF_D_Devise AS devise,
-                   SUM(ISNULL(d.FF_D_MontantTTC,0)) AS total_ttc
-            FROM [dbo].[View_FF_Entete] h
-            INNER JOIN [dbo].[View_FF_Detail] d ON h.FF_H_NumFact = d.FF_D_NumFact
-            WHERE UPPER(LTRIM(RTRIM(h.FF_H_TypeFacture))) = 'A'
-              AND YEAR(h.FF_H_DateProcess) = :year
-              AND MONTH(h.FF_H_DateProcess) = :month
-              AND d.FF_D_Devise IN ('EUR','USD')
-            GROUP BY d.FF_D_Devise
-            ORDER BY d.FF_D_Devise
+            SELECT MONTH(FF_H_DateProcess) AS month,
+                   SUM(ISNULL(FF_D_MontantTTC,0)) AS total_ttc_tnd
+            FROM [dbo].[View_FREIGHT_TND]
+            WHERE UPPER(LTRIM(RTRIM(FF_H_TypeFacture))) = 'A'
+              AND YEAR(FF_H_DateProcess) = :year
+            GROUP BY MONTH(FF_H_DateProcess)
+            ORDER BY MONTH(FF_H_DateProcess)
         """)
 
-        rows = db.session.execute(sql, {'year': year, 'month': month}).mappings().all()
-        result = {r.get('devise'): float(r.get('total_ttc') or 0) for r in rows}
-        # ensure keys exist
-        for cur in ('EUR','USD'):
-            result.setdefault(cur, 0.0)
-        return jsonify({'year': year, 'month': month, 'totals': result})
+        rows = db.session.execute(sql, {'year': year}).mappings().all()
+        by_month = {int(r['month']): float(r['total_ttc_tnd'] or 0) for r in rows}
+        series = [by_month.get(m, 0.0) for m in range(1, 13)]
+
+        return jsonify({'year': year, 'monthly_tnd': series})
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
@@ -836,81 +596,24 @@ def get_ff_monthly_totals():
     required_aa = {'AA_H_NumFacture', 'AA_H_DateProcess'}
     required_total = {'FF_T_NumFact', 'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'}
 
+    # Calculations for monthly CA removed by user request.
+    # Return empty structures so frontend does not attempt to plot computed series.
     try:
-        aa_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_AA_AvecFacture'
-        """)).scalars().all()
-        total_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_FF_Total'
-        """)).scalars().all()
-
-        aa_set = {c for c in aa_cols}
-        total_set = {c for c in total_cols}
-
-        if not required_aa.issubset(aa_set):
-            return jsonify({
-                'error': "Colonnes manquantes dans View_AA_AvecFacture",
-                'missing': sorted(required_aa - aa_set)
-            }), 500
-
-        if not required_total.issubset(total_set):
-            return jsonify({
-                'error': "Colonnes manquantes dans View_FF_Total",
-                'missing': sorted(required_total - total_set)
-            }), 500
-
-        sql = text("""
-            SELECT
-                MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) AS month,
-                SUM(TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis)
-                    + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis)) AS total,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS timbrage,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'M'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS magasinage,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS agent,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'S'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS surestarie
-            FROM [dbo].[View_FF_Entete] e
-            JOIN [dbo].[View_FF_Total] t
-                ON t.FF_T_NumFact = e.FF_H_NumFact
-            LEFT JOIN [dbo].[View_AA_AvecFacture] a
-                ON a.AA_H_NumFacture = t.FF_T_NumFact
-            WHERE YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year
-            GROUP BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
-            ORDER BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
-        """)
-
-        def build_series_and_activities(target_year):
-            rows = db.session.execute(sql, {'year': target_year}).mappings().all()
-            by_month = {int(r['month']): r for r in rows}
-            totals = [float(by_month.get(m, {}).get('total') or 0) for m in range(1, 13)]
-            activities = {
-                'timbrage': [float(by_month.get(m, {}).get('timbrage') or 0) for m in range(1, 13)],
-                'magasinage': [float(by_month.get(m, {}).get('magasinage') or 0) for m in range(1, 13)],
-                'agent': [float(by_month.get(m, {}).get('agent') or 0) for m in range(1, 13)],
-                'surestarie': [float(by_month.get(m, {}).get('surestarie') or 0) for m in range(1, 13)]
-            }
-            return totals, activities
-
-        current_totals, current_activities = build_series_and_activities(year)
-        previous_totals, previous_activities = build_series_and_activities(year - 1)
-
+        empty_month = [0.0] * 12
+        empty_activities = {
+            'timbrage': empty_month.copy(),
+            'magasinage': empty_month.copy(),
+            'agent': empty_month.copy(),
+            'surestarie': empty_month.copy()
+        }
         return jsonify({
             'year': year,
-            'current': current_totals,
-            'previous': previous_totals,
-            'activities': {
-                'current': current_activities,
-                'previous': previous_activities
-            }
+            'current': empty_month,
+            'previous': empty_month,
+            'activities': {'current': empty_activities, 'previous': empty_activities},
+            'agent_by_currency': {},
+            'invoices_by_currency': {'current': {'series': {}, 'totals': {}}, 'previous': {'series': {}, 'totals': {}}},
+            'note': 'Monthly CA calculations removed'
         })
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
@@ -930,128 +633,143 @@ def get_ff_monthly_activity_totals():
     required_total = {'FF_T_NumFact', 'FF_T_TotalSoumis', 'FF_T_TotalNonSoumis'}
     required_entete = {'FF_H_NumFact', 'FF_H_TypeFacture'}
 
+    # Monthly activity calculations removed by user request — return empty structures
     try:
-        aa_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_AA_AvecFacture'
-        """)).scalars().all()
-        total_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_FF_Total'
-        """)).scalars().all()
-        entete_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_FF_Entete'
-        """)).scalars().all()
-
-        aa_set = {c for c in aa_cols}
-        total_set = {c for c in total_cols}
-        entete_set = {c for c in entete_cols}
-
-        if not required_aa.issubset(aa_set):
-            return jsonify({'error': "Colonnes manquantes dans View_AA_AvecFacture",
-                            'missing': sorted(required_aa - aa_set)}), 500
-        if not required_total.issubset(total_set):
-            return jsonify({'error': "Colonnes manquantes dans View_FF_Total",
-                            'missing': sorted(required_total - total_set)}), 500
-        if not required_entete.issubset(entete_set):
-            return jsonify({'error': "Colonnes manquantes dans View_FF_Entete",
-                            'missing': sorted(required_entete - entete_set)}), 500
-
-        sql = text("""
-            SELECT
-                MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) AS month,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS timbrage,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'M'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS magasinage,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'A'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS agent,
-                SUM(CASE WHEN UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'S'
-                    THEN TRY_CONVERT(decimal(18,2), t.FF_T_TotalSoumis) + TRY_CONVERT(decimal(18,2), t.FF_T_TotalNonSoumis) ELSE 0 END) AS surestarie
-            FROM [dbo].[View_FF_Entete] e
-            JOIN [dbo].[View_FF_Total] t
-              ON t.FF_T_NumFact = e.FF_H_NumFact
-            LEFT JOIN [dbo].[View_AA_AvecFacture] a
-              ON a.AA_H_NumFacture = t.FF_T_NumFact
-            WHERE YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year
-            GROUP BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
-            ORDER BY MONTH(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess))
-        """)
-
-        def build_activity_series(target_year):
-            rows = db.session.execute(sql, {'year': target_year}).mappings().all()
-            by_month = {int(r['month']): r for r in rows}
-            def get_list(key):
-                return [float(by_month.get(m, {}).get(key) or 0) for m in range(1, 13)]
-            activities = {
-                'timbrage': get_list('timbrage'),
-                'magasinage': get_list('magasinage'),
-                'agent': get_list('agent'),
-                'surestarie': get_list('surestarie')
-            }
-            # Compute timbrage series directly from View_FF_Total + View_FF_Entete
-            # using the exact SQL provided by the user (month 1..12). This will
-            # replace the earlier computed timbrage values so the histogram uses
-            # the same logic as the KPI card.
-            try:
-                tim_sql = text("""
-                    SELECT MONTH(e.FF_H_DateProcess) AS month,
-                           SUM(ISNULL(ff.FF_T_TotalSoumis,0) + ISNULL(ff.FF_T_TotalNonSoumis,0)) AS timbrage
-                    FROM dbo.View_FF_Total ff
-                    INNER JOIN dbo.View_FF_Entete e ON ff.FF_T_NumFact = e.FF_H_NumFact
-                    WHERE UPPER(LTRIM(RTRIM(e.FF_H_TypeFacture))) = 'T'
-                      AND YEAR(e.FF_H_DateProcess) = :year
-                    GROUP BY MONTH(e.FF_H_DateProcess)
-                    ORDER BY month
-                """)
-                t_rows = db.session.execute(tim_sql, {'year': target_year}).mappings().all()
-                t_by_month = {int(r['month']): float(r['timbrage'] or 0) for r in t_rows}
-                activities['timbrage'] = [float(t_by_month.get(m, 0)) for m in range(1,13)]
-            except Exception:
-                # If query fails, keep previously computed timbrage
-                pass
-
-            return activities
-
-        debug = request.args.get('debug')
-        result = {
-            'year': year,
-            'current': build_activity_series(year),
-            'previous': build_activity_series(year - 1)
+        empty_month = [0.0] * 12
+        empty_activities = {
+            'timbrage': empty_month.copy(),
+            'magasinage': empty_month.copy(),
+            'agent': empty_month.copy(),
+            'surestarie': empty_month.copy()
         }
-        if debug:
-            # include raw rows for debugging (requires authenticated session)
-            rows_cur = db.session.execute(sql, {'year': year}).mappings().all()
-            rows_prev = db.session.execute(sql, {'year': year - 1}).mappings().all()
-            # convert Decimal/Date types to strings/numbers for JSON
-            def simplify(rows):
-                out = []
-                for r in rows:
-                    row = {}
-                    for k,v in r.items():
-                        try:
-                            # try to convert to float if numeric
-                            if v is None:
-                                row[k]=None
-                            else:
-                                row[k]=float(v)
-                        except Exception:
-                            try:
-                                row[k]=str(v)
-                            except Exception:
-                                row[k]=None
-                    out.append(row)
-                return out
-            result['debug_rows_current'] = simplify(rows_cur)
-            result['debug_rows_previous'] = simplify(rows_prev)
-        return jsonify(result)
+        return jsonify({
+            'year': year,
+            'current': empty_activities,
+            'previous': empty_activities,
+            'note': 'Monthly activity calculations removed'
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/invoices-by-currency', methods=['GET'])
+@login_required
+def get_invoices_by_currency():
+    """Return distinct invoice numbers that have at least one detail row in the given currency.
+
+    Query parameters:
+    - currency (default 'TND')
+    - year (optional, defaults to current year)
+    """
+    currency = (request.args.get('currency') or 'TND').strip().upper()
+    year = request.args.get('year', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    try:
+        sql = text("""
+            SELECT DISTINCT COALESCE(a.AA_H_NumFacture, e.FF_H_NumFact) AS invoice_num,
+                   UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture, '')))) AS type_facture
+            FROM dbo.View_FF_Entete e
+            LEFT JOIN dbo.View_FF_Detail d ON e.FF_H_NumFact = d.FF_D_NumFact
+            LEFT JOIN dbo.View_AA_AvecFacture a ON a.AA_H_NumFacture = e.FF_H_NumFact
+            WHERE UPPER(ISNULL(d.FF_D_Devise,'N/A')) = :currency
+              AND YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year
+        """)
+        rows = db.session.execute(sql, {'currency': currency, 'year': year}).mappings().all()
+        invoices = []
+        types = {}
+        for r in rows:
+            inv = r.get('invoice_num')
+            t = (r.get('type_facture') or '').upper()
+            if inv:
+                invoices.append(inv)
+                types[inv] = t
+        return jsonify({'year': year, 'currency': currency, 'invoices': invoices, 'types': types})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/invoices-by-currency/agent', methods=['GET'])
+@login_required
+def get_agent_invoices_by_currency():
+    """Return invoice numbers of type 'A' (Agent) that have detail rows in the given currency."""
+    currency = (request.args.get('currency') or 'TND').strip().upper()
+    year = request.args.get('year', type=int)
+    try:
+        base_sql = """
+            SELECT DISTINCT COALESCE(a.AA_H_NumFacture, e.FF_H_NumFact) AS invoice_num
+            FROM dbo.View_FF_Entete e
+            LEFT JOIN dbo.View_FF_Detail d ON e.FF_H_NumFact = d.FF_D_NumFact
+            LEFT JOIN dbo.View_AA_AvecFacture a ON a.AA_H_NumFacture = e.FF_H_NumFact
+            WHERE UPPER(ISNULL(d.FF_D_Devise,'N/A')) = :currency
+              AND UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'A'
+        """
+        params = {'currency': currency}
+        if year:
+            base_sql += "\n              AND YEAR(COALESCE(a.AA_H_DateProcess, e.FF_H_DateProcess)) = :year"
+            params['year'] = year
+
+        sql = text(base_sql)
+        rows = db.session.execute(sql, params).mappings().all()
+        invoices = [r.get('invoice_num') for r in rows if r.get('invoice_num')]
+        out = {'currency': currency, 'agent_invoices': invoices}
+        if year:
+            out['year'] = year
+        return jsonify(out)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/details-by-invoices', methods=['GET'])
+@login_required
+def get_details_by_invoices():
+    """Return detail rows from View_FF_Detail for given invoice numbers.
+
+    Query param `invoices` should be a comma-separated list of invoice numbers.
+    """
+    invs = request.args.get('invoices')
+    if not invs:
+        return jsonify({'error': 'Missing invoices parameter'}), 400
+    # split and sanitize
+    parts = [p.strip() for p in invs.split(',') if p.strip()]
+    if not parts:
+        return jsonify({'error': 'No invoice numbers provided'}), 400
+    try:
+        # inspect available columns on the view and choose a safe subset
+        detail_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Detail'
+        """)).scalars().all()
+        detail_set = {c for c in detail_cols}
+
+        # preferred columns (alias mapping) - will pick those that exist
+        preferred = [
+            ('FF_D_NumFact', 'invoice_num'),
+            ('FF_D_Devise', 'devise'),
+            ('FF_D_Montant', 'montant'),
+            ('FF_D_MontantTVA', 'montant_tva'),
+            ('FF_D_MontantTTC', 'montant_ttc'),
+            ('FF_D_MontantHT_TND', 'montant_ht_tnd')
+        ]
+
+        select_parts = [f"d.{col} AS {alias}" for col, alias in preferred if col in detail_set]
+        if not select_parts:
+            return jsonify({'error': 'Aucune colonne disponible dans View_FF_Detail pour afficher les détails'}), 500
+
+        # build parameterized IN list
+        placeholders = ','.join([f":inv{i}" for i in range(len(parts))])
+        params = {f"inv{i}": parts[i] for i in range(len(parts))}
+        sql = text(f"""
+            SELECT {', '.join(select_parts)}
+            FROM dbo.View_FF_Detail d
+            WHERE d.FF_D_NumFact IN ({placeholders})
+            ORDER BY d.FF_D_NumFact
+        """)
+        rows = db.session.execute(sql, params).mappings().all()
+        details = [dict(r) for r in rows]
+        return jsonify({'count': len(details), 'details': details})
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
@@ -1366,6 +1084,149 @@ def export_ff_list_csv():
 def get_freight_by_devise():
     """Total marge sur fret par devise depuis View_FREIGHT."""
     required_cols = {'Devise', 'MontAchat', 'MontVente'}
+
+
+@api_bp.route('/factures/annual-summary', methods=['GET'])
+@login_required
+def get_factures_annual_summary():
+    """Return annual/monthly totals by invoice type and currency using the provided SQL logic.
+    Query param: `year` (optional, defaults to current year).
+    """
+    year = request.args.get('year', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    try:
+        sql = text("""
+WITH FacturesA AS (
+    SELECT
+        YEAR(e.FF_H_DateProcess) AS annee,
+        MONTH(e.FF_H_DateProcess) AS mois,
+        'A' AS type_facture,
+        d.FF_D_Devise AS devise,
+        CASE 
+            WHEN e.FF_H_TypeFactRect = 'CN' THEN -d.FF_D_MontantTTC
+            ELSE d.FF_D_MontantTTC
+        END AS montant
+    FROM dbo.View_FF_Entete e
+    JOIN dbo.View_FF_Detail d
+        ON e.FF_H_NumFact = d.FF_D_NumFact
+    WHERE UPPER(ISNULL(e.FF_H_TypeFacture,'')) = 'A'
+      AND YEAR(e.FF_H_DateProcess) = :annee
+),
+FacturesTSM AS (
+    SELECT
+        YEAR(e.FF_H_DateProcess) AS annee,
+        MONTH(e.FF_H_DateProcess) AS mois,
+        e.FF_H_TypeFacture AS type_facture,
+        'TND' AS devise,
+        CASE 
+            WHEN e.FF_H_TypeFactRect = 'CN' 
+            THEN -(ISNULL(ff.FF_T_TotalSoumis,0) + ISNULL(ff.FF_T_TotalNonSoumis,0))
+            ELSE (ISNULL(ff.FF_T_TotalSoumis,0) + ISNULL(ff.FF_T_TotalNonSoumis,0))
+        END AS montant
+    FROM dbo.View_FF_Entete e
+    JOIN dbo.View_FF_Total ff
+        ON e.FF_H_NumFact = ff.FF_T_NumFact
+    WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) IN ('T','S','M')
+      AND YEAR(e.FF_H_DateProcess) = :annee
+),
+ToutesFactures AS (
+    SELECT * FROM FacturesA
+    UNION ALL
+    SELECT * FROM FacturesTSM
+),
+FacturesAvecAnnuel AS (
+    SELECT * FROM ToutesFactures
+    UNION ALL
+    SELECT
+        annee,
+        0 AS mois,
+        type_facture,
+        devise,
+        SUM(montant) AS montant
+    FROM ToutesFactures
+    GROUP BY annee, type_facture, devise
+)
+SELECT
+    annee,
+    mois,
+    type_facture,
+    devise,
+    SUM(montant) AS total
+FROM FacturesAvecAnnuel
+GROUP BY annee, mois, type_facture, devise
+ORDER BY annee, mois, type_facture, devise
+""")
+
+        rows = db.session.execute(sql, {'annee': year}).mappings().all()
+        result = [dict(r) for r in rows]
+        return jsonify({'year': year, 'rows': result})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/dashboard-summary', methods=['GET'])
+@login_required
+def get_factures_dashboard_summary():
+    """Try to use a DB stored procedure/function for dashboard calculations.
+    If no suitable routine is found or execution fails, fall back to
+    `/factures/annual-summary` (the SQL-based implementation).
+    Query params: `year` (optional), `proc` (optional override, e.g. dbo.MyProc)
+    """
+    year = request.args.get('year', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+
+    proc = request.args.get('proc', type=str)
+
+    try:
+        # If user didn't provide a proc name, try to discover likely routines
+        if not proc:
+            discover_sql = text("""
+SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE
+FROM INFORMATION_SCHEMA.ROUTINES
+WHERE (ROUTINE_TYPE IN ('PROCEDURE','FUNCTION'))
+  AND (
+    ROUTINE_NAME LIKE '%factur%'
+    OR ROUTINE_NAME LIKE '%ca%'
+    OR ROUTINE_NAME LIKE '%calc%'
+    OR ROUTINE_NAME LIKE '%calcul%'
+    OR ROUTINE_NAME LIKE '%dashboard%'
+  )
+ORDER BY ROUTINE_NAME
+""")
+            candidates = db.session.execute(discover_sql).fetchall()
+            if candidates:
+                # use first candidate schema.name
+                proc = f"{candidates[0][0]}.{candidates[0][1]}"
+
+        if proc:
+            # Try executing as a stored procedure: EXEC schema.name :year
+            try:
+                exec_sql = text(f"EXEC {proc} :year")
+                res = db.session.execute(exec_sql, {'year': year})
+                rows = res.mappings().all()
+                result = [dict(r) for r in rows]
+                return jsonify({'year': year, 'rows': result, 'source': 'procedure', 'routine': proc})
+            except Exception:
+                # If procedure exec failed, try calling as a table-valued function
+                try:
+                    func_sql = text(f"SELECT * FROM {proc}(:year)")
+                    res2 = db.session.execute(func_sql, {'year': year})
+                    rows2 = res2.mappings().all()
+                    result2 = [dict(r) for r in rows2]
+                    return jsonify({'year': year, 'rows': result2, 'source': 'function', 'routine': proc})
+                except Exception:
+                    # fall through to fallback
+                    pass
+
+        # Fallback: delegate to existing SQL-based annual summary
+        return get_factures_annual_summary()
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
 
 
 @api_bp.route('/factures/count', methods=['GET'])

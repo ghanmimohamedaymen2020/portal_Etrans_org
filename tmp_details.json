@@ -1,0 +1,173 @@
+{
+  "count": 21,
+  "details": [
+    {
+      "devise": "USD",
+      "invoice_num": "EXPINV2026-000223",
+      "montant": "1638.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "4895.982",
+      "montant_tva": "0.000"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000223",
+      "montant": "35.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "41.650",
+      "montant_tva": "6.650"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000223",
+      "montant": "250.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "297.500",
+      "montant_tva": "47.500"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000223",
+      "montant": "30.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "35.700",
+      "montant_tva": "5.700"
+    },
+    {
+      "devise": "USD",
+      "invoice_num": "EXPINV2026-000225",
+      "montant": "1002.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "3054.878",
+      "montant_tva": "0.000"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000225",
+      "montant": "35.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "41.650",
+      "montant_tva": "6.650"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000225",
+      "montant": "105.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "124.950",
+      "montant_tva": "19.950"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000225",
+      "montant": "30.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "35.700",
+      "montant_tva": "5.700"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000225",
+      "montant": "100.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "100.000",
+      "montant_tva": "0.000"
+    },
+    {
+      "devise": "USD",
+      "invoice_num": "EXPINV2026-000226",
+      "montant": "856.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "2558.584",
+      "montant_tva": "0.000"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000226",
+      "montant": "35.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "41.650",
+      "montant_tva": "6.650"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000226",
+      "montant": "210.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "249.900",
+      "montant_tva": "39.900"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000226",
+      "montant": "30.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "35.700",
+      "montant_tva": "5.700"
+    },
+    {
+      "devise": "USD",
+      "invoice_num": "EXPINV2026-000227",
+      "montant": "818.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "2445.002",
+      "montant_tva": "0.000"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000227",
+      "montant": "35.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "41.650",
+      "montant_tva": "6.650"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000227",
+      "montant": "210.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "249.900",
+      "montant_tva": "39.900"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000227",
+      "montant": "30.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "35.700",
+      "montant_tva": "5.700"
+    },
+    {
+      "devise": "USD",
+      "invoice_num": "EXPINV2026-000228",
+      "montant": "839.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "2507.771",
+      "montant_tva": "0.000"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000228",
+      "montant": "35.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "41.650",
+      "montant_tva": "6.650"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000228",
+      "montant": "210.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "249.900",
+      "montant_tva": "39.900"
+    },
+    {
+      "devise": "TND",
+      "invoice_num": "EXPINV2026-000228",
+      "montant": "30.000",
+      "montant_ht_tnd": null,
+      "montant_ttc": "35.700",
+      "montant_tva": "5.700"
+    }
+  ]
+}
