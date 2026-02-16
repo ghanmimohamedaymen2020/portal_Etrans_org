@@ -1151,7 +1151,11 @@ document.addEventListener('DOMContentLoaded',function(){
       if(usedYear===null) usedYear=now.getFullYear();
       const monthNamesFull=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
       const baseTitle=(data.title||'').replace('(mois)','').trim();
-      listTitle.textContent=`${baseTitle} ${monthNamesFull[usedMonth-1]} ${usedYear}`;
+      // map type code to human-readable label when provided in opts
+      const typeMap = { 'T':'Timbrage', 'M':'Magasinage', 'S':'Surestarie', 'A':'Agent' };
+      const typeCode = opts && opts.type ? String(opts.type).toUpperCase() : null;
+      const typeLabel = typeCode && typeMap[typeCode] ? ` ${typeMap[typeCode]}` : '';
+      listTitle.textContent=`${baseTitle}${typeLabel} ${monthNamesFull[usedMonth-1]} ${usedYear}`;
     }
     listTableBody.innerHTML='';
     const columns=key==='generated'?columnSets.freightSummary:(data.columns||columnSets.default);
