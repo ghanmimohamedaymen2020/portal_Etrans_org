@@ -878,7 +878,7 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'date_creation',label:'Date Création'}
     ],
     invoices:[
-      {key:'reference',label:'Numéro avis'},
+      {key:'reference',label:'Numéro facture'},
       {key:'date_process',label:'Date Process'},
       {key:'dossier',label:'Dossier'},
       {key:'nom_client',label:'Agent'},
@@ -893,7 +893,7 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'devise',label:'Devise'}
     ],
     invoicesAgent:[
-      {key:'reference',label:'Numéro avis'},
+      {key:'reference',label:'Numéro facture'},
       {key:'date_process',label:'Date Process'},
       {key:'dossier',label:'Dossier'},
       {key:'nom_client',label:'Agent'},
@@ -907,8 +907,12 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'devise',label:'Devise'}
     ],
     aaSansFacture:[
+      {key:'AA_H_Reference',label:'Numéro Avis'},
       {key:'AA_H_Dossier',label:'Dossier'},
       {key:'AA_H_NomClient',label:'Client'},
+      {key:'aa_total_non_soumis',label:'Total Non Soumis'},
+      {key:'aa_total_soumis',label:'Total Soumis'},
+      {key:'aa_total_tva',label:'Total TVA'},
       {key:'AA_H_TVA',label:'TVA'},
       {key:'AA_H_Voyage',label:'Voyage'},
       {key:'AA_H_Navire',label:'Navire'},
@@ -920,11 +924,11 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'AA_H_Escale',label:'Escale'},
       {key:'AA_H_Rubrique',label:'Rubrique'},
       {key:'AA_H_NomCommercial',label:'Nom Commercial'},
-      {key:'AA_H_Trans_PC_ClientFinal',label:'Client Final'},
+      //{key:'AA_H_Trans_PC_ClientFinal',label:'Client Final'},
       {key:'AA_H_NomClientFinal',label:'Nom Client Final'}
     ],
     default:[
-      {key:'reference',label:'Numéro avis'},
+      {key:'reference',label:'Numéro facture'},
       {key:'dossier',label:'Dossier'},
       {key:'type',label:'Type'},
       {key:'libelle',label:'Libellé'},
@@ -1201,6 +1205,9 @@ document.addEventListener('DOMContentLoaded',function(){
               let fetchUrl = `/api/factures/ff-list?month=${monthFilter}&year=${yearFilter}`;
               if(opts && opts.type){
                 fetchUrl += `&type=${encodeURIComponent(opts.type)}`;
+              }
+              if(opts && opts.currency){
+                fetchUrl += `&currency=${encodeURIComponent(opts.currency)}`;
               }
               const resp = await fetch(fetchUrl);
               const data = await resp.json();
@@ -1530,10 +1537,13 @@ document.addEventListener('DOMContentLoaded',function(){
         let cellHtml = value;
         try{
           const keyLow = (col.key||'').toString().toLowerCase();
-          if(keyLow === 'reference' || /numf|numfact|num_fact/i.test(col.key)){
+          if(/reference|numf|numfact|num_fact/i.test(col.key)){
             const inv = String(value||'').trim();
             if(inv){
-              cellHtml = `<a href="#" class="invoice-link" data-invoice="${inv}">${inv}</a>`;
+              // mark AA header references so click handler can call AA detail endpoint directly
+              const isAA = /AA_H_/i.test(col.key) || /AA_H_Reference/i.test(col.key);
+              const aaAttr = isAA ? ' data-aa="1"' : '';
+              cellHtml = `<a href="#" class="invoice-link" data-invoice="${inv}"${aaAttr}>${inv}</a>`;
             }
           }
         }catch(e){ /* ignore formatting errors */ }
@@ -1800,18 +1810,41 @@ document.addEventListener('DOMContentLoaded',function(){
         // Only open invoice list when mode is 'total' or 'detail'
         const mode = document.getElementById('ca-mode-select')?.value || 'total';
         if(mode !== 'total' && mode !== 'detail') return;
-        const el=elements[0];
-        const monthIndex=el.index; // 0-based index into labels
+        const el = elements[0];
+        const monthIndex = el.index; // 0-based index into labels
         const month = monthIndex + 1; // 1-based month
-        const now=new Date();
+        const now = new Date();
         const year = now.getFullYear(); // only current year
-        const url=new URL(window.location.href);
+
+        // determine which dataset was clicked to infer invoice type/currency
+        let typeChar = null;
+        let currency = null;
+        try{
+          const dsIndex = el.datasetIndex;
+          const ds = this.data && this.data.datasets && this.data.datasets[dsIndex] ? this.data.datasets[dsIndex] : {};
+          const lbl = (ds.label||'').toString();
+          if(/\bTimbrage\b/i.test(lbl)) typeChar = 'T';
+          else if(/\bMagasinage\b/i.test(lbl)) typeChar = 'M';
+          else if(/\bSurestarie\b/i.test(lbl)) typeChar = 'S';
+          else if(/\bAgent\b/i.test(lbl)) typeChar = 'A';
+          // extract currency for agent series like 'Agent - EUR'
+          const m = lbl.match(/Agent\s*[-:]?\s*(\w{3})/i);
+          if(m && m[1]) currency = m[1].toUpperCase();
+        }catch(e){ /* ignore */ }
+
+        const url = new URL(window.location.href);
         url.searchParams.set('list','invoices');
         url.searchParams.set('listOnly','1');
         url.searchParams.set('list_month',String(month));
         url.searchParams.set('list_year',String(year));
+        if(typeChar) url.searchParams.set('type', typeChar);
+        if(currency) url.searchParams.set('currency', currency);
         window.open(url.toString(),'_blank');
-        renderList('invoices',{month,year});
+
+        const opts = { month, year };
+        if(typeChar) opts.type = typeChar;
+        if(currency) opts.currency = currency;
+        renderList('invoices', opts);
         if(listSearch) listSearch.value='';
       },
       scales:{
@@ -1974,14 +2007,29 @@ document.addEventListener('DOMContentLoaded',function(){
     const inv = a.getAttribute('data-invoice');
     if(!inv) return;
     try{
-      // fetch detail rows and show in modal (reuse invoices modal table)
-      const resp = await fetch(`/api/factures/details-by-invoices?invoices=${encodeURIComponent(inv)}`);
-      const json = await resp.json();
-      if(!resp.ok){
-        alert('Erreur chargement détails: ' + (json.error||resp.statusText));
-        return;
+      // If link marked as AA, query AA details directly
+      let rows = [];
+      const isAA = a.getAttribute('data-aa');
+      if(isAA){
+        const resp2 = await fetch(`/api/factures/details-aa?reference=${encodeURIComponent(inv)}`);
+        if(resp2.ok){
+          const j2 = await resp2.json();
+          rows = j2.details || [];
+        }
+      } else {
+        // fetch FF detail rows and show in modal (reuse invoices modal table)
+        const resp = await fetch(`/api/factures/details-by-invoices?invoices=${encodeURIComponent(inv)}`);
+        let json = await resp.json();
+        if(resp.ok){ rows = json.details || []; }
+        // fallback to AA details if FF details empty
+        if(!rows.length){
+          try{
+            const resp2 = await fetch(`/api/factures/details-aa?reference=${encodeURIComponent(inv)}`);
+            const j2 = await resp2.json();
+            if(resp2.ok){ rows = j2.details || []; }
+          }catch(e){ /* ignore */ }
+        }
       }
-      const rows = json.details || [];
       invoicesModalTitle.textContent = `Détails — ${inv}`;
       const infoEl = document.getElementById('invoices-modal-info');
       if(!rows.length){
@@ -2006,15 +2054,21 @@ document.addEventListener('DOMContentLoaded',function(){
             <strong>Service:</strong> ${service}
           `;
         }
-        // Render detail rows (devise, montant, montant_tva, montant_ttc, montant_ht_tnd)
+        // Render detail rows (map various possible column names from FF or AA views)
         invoicesModalBody.innerHTML = rows.map(r=>{
+          const lib = r.libelle || r.FF_D_Libelle || r.AA_D_Libelle || r.AA_D_Intitule || r.description || r.Libelle || '';
+          const devise = r.devise || r.FF_D_Devise || r.AA_D_Devise || r.currency || 'TND';
+          const montant = (r.montant!==undefined? r.montant : (r.FF_D_Montant!==undefined? r.FF_D_Montant : (r.AA_D_Montant!==undefined? r.AA_D_Montant : '')));
+          const montant_tva = (r.montant_tva!==undefined? r.montant_tva : (r.FF_D_MontantTVA!==undefined? r.FF_D_MontantTVA : (r.AA_D_MontantTVA!==undefined? r.AA_D_MontantTVA : '')));
+          const montant_ttc = (r.montant_ttc!==undefined? r.montant_ttc : (r.FF_D_MontantTTC!==undefined? r.FF_D_MontantTTC : (r.AA_D_MontantTTC!==undefined? r.AA_D_MontantTTC : '')));
+          const montant_ht_tnd = (r.montant_ht_tnd!==undefined? r.montant_ht_tnd : (r.FF_D_MontantHT_TND!==undefined? r.FF_D_MontantHT_TND : (r.AA_D_MontantHT_TND!==undefined? r.AA_D_MontantHT_TND : '')));
           return `<tr>
-            <td>${r.libelle||''}</td>
-            <td>${r.devise||''}</td>
-            <td>${r.montant!==undefined?formatAmount(r.montant):''}</td>
-            <td>${r.montant_tva!==undefined?formatAmount(r.montant_tva):''}</td>
-            <td>${r.montant_ttc!==undefined?formatAmount(r.montant_ttc):''}</td>
-            <td>${r.montant_ht_tnd!==undefined?formatAmount(r.montant_ht_tnd):''}</td>
+            <td>${lib}</td>
+            <td>${devise}</td>
+            <td>${montant!==''? (Number(montant)||montant===0? formatAmount(montant):montant) : ''}</td>
+            <td>${montant_tva!==''? (Number(montant_tva)||montant_tva===0? formatAmount(montant_tva):montant_tva) : ''}</td>
+            <td>${montant_ttc!==''? (Number(montant_ttc)||montant_ttc===0? formatAmount(montant_ttc):montant_ttc) : ''}</td>
+            <td>${montant_ht_tnd!==''? (Number(montant_ht_tnd)||montant_ht_tnd===0? formatAmount(montant_ht_tnd):montant_ht_tnd) : ''}</td>
           </tr>`;
         }).join('');
       }

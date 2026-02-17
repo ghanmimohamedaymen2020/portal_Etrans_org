@@ -188,8 +188,35 @@ def get_factures_aa_detail():
             # ensure columns exist in the view
             available = {c for c in sans_cols}
             select_parts = [c for c in select_list if c in available]
+            # attempt to include AA totals from View_AA_Total when available
+            aa_total_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'
+            """)).scalars().all()
+            aa_total_set = {c for c in aa_total_cols}
+            aa_join_col = None
+            # prefer referencing by AA_T_Reference if both sides exist
+            if 'AA_T_Reference' in aa_total_set and 'AA_H_Reference' in available:
+                aa_join_col = ('AA_T_Reference', 'AA_H_Reference')
+            elif 'AA_T_NumFact' in aa_total_set and 'AA_H_NumFacture' in available:
+                aa_join_col = ('AA_T_NumFact', 'AA_H_NumFacture')
+            elif 'AA_T_NumFacture' in aa_total_set and 'AA_H_NumFacture' in available:
+                aa_join_col = ('AA_T_NumFacture', 'AA_H_NumFacture')
+
+            # include aa total select parts when present
+            if 'AA_T_TotalNonSoumis' in aa_total_set:
+                select_parts.append('at.AA_T_TotalNonSoumis AS aa_total_non_soumis')
+            if 'AA_T_TotalSoumis' in aa_total_set:
+                select_parts.append('at.AA_T_TotalSoumis AS aa_total_soumis')
+            if 'AA_T_TotalTVA' in aa_total_set:
+                select_parts.append('at.AA_T_TotalTVA AS aa_total_tva')
+
             if select_parts:
-                sql = text(f"SELECT TOP 1000 {', '.join(select_parts)} FROM [dbo].[View_AA_SansFacture] ORDER BY AA_H_DateProcess DESC")
+                join_clause = ''
+                if aa_join_col:
+                    join_clause = f" LEFT JOIN [dbo].[View_AA_Total] at ON at.{aa_join_col[0]} = a.{aa_join_col[1]}"
+                sql = text(f"SELECT TOP 1000 {', '.join(select_parts)} FROM [dbo].[View_AA_SansFacture] a {join_clause} ORDER BY AA_H_DateProcess DESC")
                 rows = db.session.execute(sql).mappings().all()
                 factures = [dict(r) for r in rows]
                 return jsonify({'factures': factures, 'total': len(factures)})
@@ -353,6 +380,35 @@ def get_factures_aa_detail():
         return jsonify({'factures': factures, 'total': len(factures)})
     except Exception as exc:
         return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/details-aa', methods=['GET'])
+@login_required
+def get_aa_details_by_reference():
+    """Return detail rows from View_AA_Detail for a given AA reference."""
+    ref = request.args.get('reference')
+    if not ref:
+        return jsonify({'details': [], 'error': 'Missing reference parameter'}), 400
+    try:
+        # Inspect columns of View_AA_Detail to build a safe WHERE clause
+        detail_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_AA_Detail'
+        """)).scalars().all()
+        available = {c for c in detail_cols}
+        # candidate reference columns
+        candidates = ['AA_D_Reference','AA_D_NumAvis','AA_D_NumFacture','AA_D_Ref','AA_D_Num']
+        where_cols = [c for c in candidates if c in available]
+        if not where_cols:
+            # fallback: return empty
+            return jsonify({'details': []})
+        conditions = ' OR '.join([f"{col} = :ref" for col in where_cols])
+        sql = text(f"SELECT * FROM [dbo].[View_AA_Detail] WHERE {conditions} ORDER BY 1")
+        rows = db.session.execute(sql, {'ref': ref}).mappings().all()
+        details = [dict(r) for r in rows]
+        return jsonify({'details': details, 'count': len(details)})
+    except Exception as exc:
+        return jsonify({'details': [], 'error': str(exc)}), 500
 
 @api_bp.route('/factures/ff-activity', methods=['GET'])
 @login_required
@@ -826,7 +882,8 @@ def get_ff_list():
 
         select_parts = [
             'e.FF_H_DateProcess AS date_process',
-            'e.FF_H_Dossier AS dossier'
+            'e.FF_H_Dossier AS dossier',
+            "e.FF_H_NumFact AS reference"
         ]
         if 'FF_H_NomClient' in entete_set:
             select_parts.append('e.FF_H_NomClient AS nom_client')
