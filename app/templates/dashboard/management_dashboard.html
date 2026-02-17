@@ -2011,10 +2011,27 @@ document.addEventListener('DOMContentLoaded',function(){
       let rows = [];
       const isAA = a.getAttribute('data-aa');
       if(isAA){
+        // Try to get entete/context from aa-detail listing for a better header
+        let headerCandidate = null;
+        try{
+          const listResp = await fetch('/api/factures/aa-detail?limit=0');
+          if(listResp.ok){
+            const listJson = await listResp.json();
+            const candidates = listJson.factures || [];
+            headerCandidate = candidates.find(r => {
+              const refs = [r.AA_H_Reference, r.reference, r.AA_H_NumFacture, r.AA_H_NumFact];
+              return refs.some(x => x && String(x).trim() === String(inv).trim());
+            }) || null;
+          }
+        }catch(e){ /* ignore */ }
         const resp2 = await fetch(`/api/factures/details-aa?reference=${encodeURIComponent(inv)}`);
         if(resp2.ok){
           const j2 = await resp2.json();
           rows = j2.details || [];
+          if(headerCandidate){
+            // attach header candidate to details array for modal header mapping
+            try{ rows.__header = headerCandidate; }catch(e){ /* ignore */ }
+          }
         }
       } else {
         // fetch FF detail rows and show in modal (reuse invoices modal table)
@@ -2036,14 +2053,21 @@ document.addEventListener('DOMContentLoaded',function(){
         if(infoEl) infoEl.textContent = '';
         invoicesModalBody.innerHTML = `<tr><td colspan="5">Aucun détail trouvé pour ${inv}</td></tr>`;
       } else {
-        // Extract entête/context from the first row if present
-        const first = rows[0] || {};
-        const dp = first.date_process ? formatDateValue(first.date_process) : '';
-        const dossier = first.dossier || '';
-        const client = first.nom_client || '';
-        const eta = first.eta || '';
-        const house = first.house || '';
-        const service = first.service || '';
+        // Extract entête/context: prefer entête found from AA listing (rows.__header), else use first detail row
+        const first = (rows && rows.__header) ? rows.__header : (rows[0] || {});
+        const getVal = (obj, keys) => {
+          for(const k of keys){
+            if(obj && obj[k]!==undefined && obj[k]!==null && String(obj[k]).trim()!=='') return obj[k];
+          }
+          return '';
+        };
+        const dpRaw = getVal(first, ['date_process','AA_H_DateProcess','AA_D_DateProcess','AA_D_Date','AA_D_Date_Process']);
+        const dp = dpRaw ? formatDateValue(dpRaw) : '';
+        const dossier = getVal(first, ['dossier','AA_H_Dossier','AA_D_Dossier','AA_D_DossierRef','AA_H_DossierRef']);
+        const client = getVal(first, ['nom_client','AA_H_NomClient','AA_D_NomClient','AA_H_NomClientFinal']);
+        const eta = getVal(first, ['eta','AA_H_ETA','AA_D_ETA']);
+        const house = getVal(first, ['house','AA_H_House','AA_D_House']);
+        const service = getVal(first, ['service','AA_H_Service','AA_D_Service']);
         if(infoEl){
           infoEl.innerHTML = `
             <strong>Dossier:</strong> ${dossier} &nbsp; • &nbsp;
