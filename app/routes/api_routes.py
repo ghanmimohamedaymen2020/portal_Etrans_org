@@ -813,7 +813,10 @@ def get_details_by_invoices():
             ('FF_D_Montant', 'montant'),
             ('FF_D_MontantTVA', 'montant_tva'),
             ('FF_D_MontantTTC', 'montant_ttc'),
-            ('FF_D_MontantHT_TND', 'montant_ht_tnd')
+            # include a few common variants for HT columns so we can use them as fallbacks
+            ('FF_D_MontantHT_TND', 'montant_ht_tnd'),
+            ('FF_D_MontantHT', 'montant_ht'),
+            ('FF_D_Montant_HT_TND', 'montant_ht_tnd_alt')
         ]
 
         # preferred entete columns to provide context for detail rows
@@ -821,6 +824,7 @@ def get_details_by_invoices():
             ('FF_H_DateProcess', 'date_process'),
             ('FF_H_Dossier', 'dossier'),
             ('FF_H_NomClient', 'nom_client'),
+            ('FF_H_TypeFacture', 'type_facture'),
             ('FF_H_ETA', 'eta'),
             ('FF_H_House', 'house'),
             ('FF_H_Service', 'service')
@@ -844,6 +848,101 @@ def get_details_by_invoices():
         """)
         rows = db.session.execute(sql, params).mappings().all()
         details = [dict(r) for r in rows]
+
+        # Post-process rows to populate montant_ht_tnd when it's missing.
+        # Strategy:
+        # 1) If montant_ht_tnd present, keep it.
+        # 2) If 'montant_ht' present and devise is TND, use it.
+        # 3) If both montant_ttc and montant_tva present and amounts are TND (or devise missing), compute montant_ttc - montant_tva.
+        # 4) As a last resort, try to fetch converted HT from View_FREIGHT_TND for the same invoice number.
+        freight_cache = {}
+        for row in details:
+            try:
+                mh_tnd = row.get('montant_ht_tnd')
+                # also consider alt column
+                if mh_tnd in (None, '') and row.get('montant_ht_tnd_alt') not in (None, ''):
+                    mh_tnd = row.get('montant_ht_tnd_alt')
+
+                if mh_tnd not in (None, ''):
+                    # ensure numeric
+                    try:
+                        row['montant_ht_tnd'] = float(mh_tnd)
+                        continue
+                    except Exception:
+                        pass
+
+                devise = (row.get('devise') or '').strip().upper()
+                # prefer explicit montant_ht column if present
+                montant_ht = row.get('montant_ht')
+                if montant_ht not in (None, '') and devise == 'TND':
+                    try:
+                        row['montant_ht_tnd'] = float(montant_ht)
+                        continue
+                    except Exception:
+                        pass
+
+                # try compute from TTC - TVA when available
+                montant_ttc = row.get('montant_ttc')
+                montant_tva = row.get('montant_tva')
+                type_fact = (row.get('type_facture') or '').strip().upper()
+                # Compute HT when amounts available AND either currency is TND/unknown,
+                # or it's a Timbrage invoice and currency is different from TND
+                compute_ht = False
+                if montant_ttc not in (None, '') and montant_tva not in (None, ''):
+                    if devise in ('', 'TND'):
+                        compute_ht = True
+                    elif type_fact.startswith('T') and devise != 'TND':
+                        compute_ht = True
+
+                if compute_ht:
+                    try:
+                        row['montant_ht_tnd'] = float(montant_ttc) - float(montant_tva)
+                        continue
+                    except Exception:
+                        pass
+
+                # last resort: try to lookup converted HT in View_FREIGHT_TND by invoice
+                inv = row.get('invoice_num')
+                dossier = row.get('dossier')
+                house = row.get('house')
+                lookup_key = None
+                # prefer dossier+house when available (more specific)
+                if dossier and house:
+                    lookup_key = f"{dossier}::{house}"
+                elif inv:
+                    lookup_key = inv
+
+                if lookup_key:
+                    if lookup_key not in freight_cache:
+                        # try queries: by dossier+house first (if provided), else by invoice num
+                        v = None
+                        try:
+                            if dossier and house:
+                                q = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM dbo.View_FREIGHT_TND WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
+                                v = q.get('FF_D_MontantHT_TND') if q else None
+                            if v in (None, '') and inv:
+                                q2 = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM dbo.View_FREIGHT_TND WHERE FF_D_NumFact = :inv"), {'inv': inv}).mappings().first()
+                                v = q2.get('FF_D_MontantHT_TND') if q2 else None
+                            # fallback to fully qualified Dashboard.dbo if not found
+                            if v in (None, ''):
+                                if dossier and house:
+                                    q3 = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
+                                    v = q3.get('FF_D_MontantHT_TND') if q3 else None
+                                if v in (None, '') and inv:
+                                    q4 = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_NumFact = :inv"), {'inv': inv}).mappings().first()
+                                    v = q4.get('FF_D_MontantHT_TND') if q4 else None
+                        except Exception:
+                            v = None
+                        try:
+                            freight_cache[lookup_key] = float(v) if v not in (None, '') else None
+                        except Exception:
+                            freight_cache[lookup_key] = None
+                    if freight_cache.get(lookup_key) is not None:
+                        row['montant_ht_tnd'] = freight_cache.get(lookup_key)
+            except Exception:
+                # don't fail the whole request on a single row error
+                continue
+
         return jsonify({'count': len(details), 'details': details})
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
@@ -933,6 +1032,18 @@ def get_ff_list():
         else:
             select_parts.append("NULL AS total_ttc")
 
+        # Try to include HT total (TND) when the totals view exposes it under common names
+        ht_candidates = ['FF_T_TotalHT_TND', 'FF_T_TotalHT', 'FF_T_Total_HT_TND']
+        ht_col = None
+        for c in ht_candidates:
+            if c in total_set:
+                ht_col = c
+                break
+        if ht_col:
+            select_parts.append(f't.{ht_col} AS total_ht_tnd')
+        else:
+            select_parts.append("NULL AS total_ht_tnd")
+
         # include a representative currency for the invoice (from details)
         # For Timbrage/Magasinage/Surestarie invoices the UI/list should show TND
         if req_type and str(req_type).upper() in ('T', 'M', 'S'):
@@ -984,6 +1095,16 @@ def get_ff_list():
                 t_select.append('t.FF_T_TotalTTC AS total_ttc')
             else:
                 t_select.append("NULL AS total_ttc")
+            # include HT total if available in totals view
+            ht_col = None
+            for c in ['FF_T_TotalHT_TND', 'FF_T_TotalHT', 'FF_T_Total_HT_TND']:
+                if c in total_set:
+                    ht_col = c
+                    break
+            if ht_col:
+                t_select.append(f't.{ht_col} AS total_ht_tnd')
+            else:
+                t_select.append("NULL AS total_ht_tnd")
             # include a representative currency for the invoice (from details)
             # For Timbrage/Magasinage/Surestarie invoices the UI/list should show TND
             if req_type and str(req_type).upper() in ('T', 'M', 'S'):
@@ -1007,6 +1128,7 @@ def get_ff_list():
                     'ff_total_soumis': row.get('ff_total_soumis'),
                     'ff_total_tva': row.get('ff_total_tva'),
                     'total_ttc': row.get('total_ttc'),
+                    'total_ht_tnd': row.get('total_ht_tnd'),
                     'devise': row.get('devise')
                 }
                 for row in rows
@@ -1020,6 +1142,74 @@ def get_ff_list():
             sql = text(sql_text)
             rows = db.session.execute(sql, params).mappings().all()
             factures = [dict(row) for row in rows]
+
+        # Post-process factures to populate total_ht_tnd when missing/null.
+        freight_cache = {}
+        for f in factures:
+            try:
+                if f.get('total_ht_tnd') not in (None, ''):
+                    # ensure numeric
+                    try:
+                        f['total_ht_tnd'] = float(f.get('total_ht_tnd'))
+                        continue
+                    except Exception:
+                        pass
+
+                # Try compute from total_ttc - ff_total_tva when both present
+                ttc = f.get('total_ttc')
+                tva = f.get('ff_total_tva')
+                f_dev = (f.get('devise') or '').strip().upper()
+                # Compute HT if totals are present and either currency is TND/unknown,
+                # or requested type is Timbrage and currency != TND
+                compute_tot_ht = False
+                if ttc not in (None, '') and tva not in (None, ''):
+                    if f_dev in ('', 'TND'):
+                        compute_tot_ht = True
+                    elif req_type and str(req_type).upper().startswith('T') and f_dev != 'TND':
+                        compute_tot_ht = True
+
+                if compute_tot_ht:
+                    try:
+                        f['total_ht_tnd'] = float(ttc) - float(tva)
+                        continue
+                    except Exception:
+                        pass
+
+                # last resort: lookup in View_FREIGHT_TND by reference or dossier+house
+                ref = f.get('reference') or f.get('FF_H_NumFact') or f.get('reference')
+                dossier = f.get('dossier')
+                house = f.get('house')
+                lookup_key = None
+                if dossier and house:
+                    lookup_key = f"{dossier}::{house}"
+                elif ref:
+                    lookup_key = ref
+
+                if lookup_key:
+                    if lookup_key not in freight_cache:
+                        try:
+                            v = None
+                            if dossier and house:
+                                q = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
+                                v = q.get('s') if q else None
+                            if v in (None, 0) and ref:
+                                q2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_NumFact = :ref"), {'ref': ref}).mappings().first()
+                                v = q2.get('s') if q2 else None
+                            # fallback to Dashboard.dbo
+                            if v in (None, 0):
+                                if dossier and house:
+                                    q3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
+                                    v = q3.get('s') if q3 else None
+                                if v in (None,0) and ref:
+                                    q4 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_NumFact = :ref"), {'ref': ref}).mappings().first()
+                                    v = q4.get('s') if q4 else None
+                            freight_cache[lookup_key] = float(v) if v not in (None, '') else None
+                        except Exception:
+                            freight_cache[lookup_key] = None
+                    if freight_cache.get(lookup_key) is not None:
+                        f['total_ht_tnd'] = freight_cache.get(lookup_key)
+            except Exception:
+                continue
         return jsonify({'factures': factures, 'total': len(factures)})
     except Exception as exc:
         return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500

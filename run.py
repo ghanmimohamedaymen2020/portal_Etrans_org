@@ -2,11 +2,17 @@ import os
 from dotenv import load_dotenv
 from app import create_app, db
 
-# Charger les variables d'environnement
-load_dotenv()
+# Determine environment and load corresponding .env file if present
+env = os.environ.get('FLASK_ENV', 'development')
+dotenv_path = f'.env.{env}'
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+else:
+    # fallback to default .env
+    load_dotenv()
 
 # Créer l'application
-app = create_app(os.environ.get('FLASK_ENV', 'development'))
+app = create_app(env)
 
 @app.shell_context_processor
 def make_shell_context():

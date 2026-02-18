@@ -422,7 +422,7 @@ main {
       <span class="spinner-border spinner-border-sm" role="status"></span>
     </div>
     <div class="kpi-sub">
-      <span class="text-success"><i class="fas fa-circle"></i> En ligne maintenant</span>
+      <span id="active-users-sub" class="text-success"><i class="fas fa-circle"></i> En ligne maintenant</span>
     </div>
   </div>
   
@@ -702,7 +702,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout 10s
             
-            const response = await fetch('/dashboard/api/stats/admin', {
+            const response = await fetch('/api/admin/summary', {
                 signal: controller.signal,
                 headers: {
                     'Cache-Control': 'no-cache',
@@ -750,10 +750,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateUI(data) {
         // Éléments KPI
         const elements = {
-            'total-users': data.total_users,
-            'active-users': data.active_users,
-            'connexions-today': data.connexions_today,
-            'total-dossiers': data.total_dossiers
+          'total-users': data.total_users,
+          // main value for active-users shows currently connected users
+          'active-users': data.connected_now !== undefined ? data.connected_now : data.active_users,
+          'connexions-today': data.connexions_today,
+          'total-dossiers': data.total_dossiers
         };
         
         for (const [id, value] of Object.entries(elements)) {
@@ -787,6 +788,15 @@ document.addEventListener('DOMContentLoaded', function() {
             lastUpdateEl.textContent = formatters.date.format(now);
             lastUpdateEl.setAttribute('datetime', now.toISOString());
         }
+
+        // Update active-users subtext with 30-day active users when available
+        try {
+          const subEl = document.getElementById('active-users-sub');
+          if (subEl) {
+            const active30 = data.active_users_30d !== undefined && data.active_users_30d !== null ? data.active_users_30d : 0;
+            subEl.innerHTML = `<i class="fas fa-history"></i> ${formatters.number.format(active30)} actifs (30j)`;
+          }
+        } catch (e) { console.error('Erreur mise à jour sous-texte active-users', e); }
     }
     
     // Valeurs par défaut en cas d'erreur

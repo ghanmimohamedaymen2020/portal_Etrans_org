@@ -7,6 +7,10 @@ echo " E-Trans - Projet de Gestion des Avis"
 echo "========================================"
 echo ""
 
+# Usage: ./start.sh [development|production]
+ENV_ARG=${1:-development}
+export FLASK_ENV=${ENV_ARG}
+
 # Créer l'environnement virtuel s'il n'existe pas
 if [ ! -d "venv" ]; then
     echo "[*] Création de l'environnement virtuel..."
@@ -25,9 +29,9 @@ pip install -r requirements.txt
 echo "[*] Initialisation de la base de données..."
 python init_db.py
 
-echo ""
-echo "[✓] Démarrage de l'application..."
+echo "" 
+echo "[✓] Démarrage de l'application (ENV=${FLASK_ENV})..."
 echo "[*] Accédez à http://localhost:5000"
-echo ""
+echo "" 
 
 python run.py

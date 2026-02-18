@@ -6,6 +6,11 @@ echo  E-Trans - Projet de Gestion des Avis
 echo ========================================
 echo.
 
+REM Usage: start.bat [development|production]
+SET ENV_ARG=%1
+IF "%ENV_ARG%"=="" SET ENV_ARG=development
+SET FLASK_ENV=%ENV_ARG%
+
 REM Créer l'environnement virtuel s'il n'existe pas
 if not exist venv (
     echo [*] Création de l'environnement virtuel...
@@ -25,7 +30,7 @@ echo [*] Initialisation de la base de données...
 python init_db.py
 
 echo.
-echo [✓] Démarrage de l'application...
+echo [✓] Démarrage de l'application (ENV=%FLASK_ENV%)...
 echo [*] Accédez à http://localhost:5000
 echo.
 
