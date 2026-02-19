@@ -850,21 +850,19 @@ def get_details_by_invoices():
         details = [dict(r) for r in rows]
 
         # Post-process rows to populate montant_ht_tnd when it's missing.
-        # Strategy:
-        # 1) If montant_ht_tnd present, keep it.
-        # 2) If 'montant_ht' present and devise is TND, use it.
-        # 3) If both montant_ttc and montant_tva present and amounts are TND (or devise missing), compute montant_ttc - montant_tva.
-        # 4) As a last resort, try to fetch converted HT from View_FREIGHT_TND for the same invoice number.
+        # We'll try to compute/resolve values in bulk to avoid issuing one DB query per row.
         freight_cache = {}
+
+        # First pass: try simple per-row computation and collect lookup keys for batch queries
+        refs_to_lookup = set()
+        pairs_to_lookup = set()
         for row in details:
             try:
                 mh_tnd = row.get('montant_ht_tnd')
-                # also consider alt column
                 if mh_tnd in (None, '') and row.get('montant_ht_tnd_alt') not in (None, ''):
                     mh_tnd = row.get('montant_ht_tnd_alt')
 
                 if mh_tnd not in (None, ''):
-                    # ensure numeric
                     try:
                         row['montant_ht_tnd'] = float(mh_tnd)
                         continue
@@ -872,7 +870,6 @@ def get_details_by_invoices():
                         pass
 
                 devise = (row.get('devise') or '').strip().upper()
-                # prefer explicit montant_ht column if present
                 montant_ht = row.get('montant_ht')
                 if montant_ht not in (None, '') and devise == 'TND':
                     try:
@@ -881,12 +878,9 @@ def get_details_by_invoices():
                     except Exception:
                         pass
 
-                # try compute from TTC - TVA when available
                 montant_ttc = row.get('montant_ttc')
                 montant_tva = row.get('montant_tva')
                 type_fact = (row.get('type_facture') or '').strip().upper()
-                # Compute HT when amounts available AND either currency is TND/unknown,
-                # or it's a Timbrage invoice and currency is different from TND
                 compute_ht = False
                 if montant_ttc not in (None, '') and montant_tva not in (None, ''):
                     if devise in ('', 'TND'):
@@ -901,46 +895,75 @@ def get_details_by_invoices():
                     except Exception:
                         pass
 
-                # last resort: try to lookup converted HT in View_FREIGHT_TND by invoice
+                # prepare keys for batch lookup (fallback)
                 inv = row.get('invoice_num')
                 dossier = row.get('dossier')
                 house = row.get('house')
-                lookup_key = None
-                # prefer dossier+house when available (more specific)
                 if dossier and house:
-                    lookup_key = f"{dossier}::{house}"
+                    pairs_to_lookup.add((dossier, house))
                 elif inv:
-                    lookup_key = inv
-
-                if lookup_key:
-                    if lookup_key not in freight_cache:
-                        # try queries: by dossier+house first (if provided), else by invoice num
-                        v = None
-                        try:
-                            if dossier and house:
-                                q = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM dbo.View_FREIGHT_TND WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
-                                v = q.get('FF_D_MontantHT_TND') if q else None
-                            if v in (None, '') and inv:
-                                q2 = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM dbo.View_FREIGHT_TND WHERE FF_D_NumFact = :inv"), {'inv': inv}).mappings().first()
-                                v = q2.get('FF_D_MontantHT_TND') if q2 else None
-                            # fallback to fully qualified Dashboard.dbo if not found
-                            if v in (None, ''):
-                                if dossier and house:
-                                    q3 = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
-                                    v = q3.get('FF_D_MontantHT_TND') if q3 else None
-                                if v in (None, '') and inv:
-                                    q4 = db.session.execute(text("SELECT TOP 1 FF_D_MontantHT_TND FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_NumFact = :inv"), {'inv': inv}).mappings().first()
-                                    v = q4.get('FF_D_MontantHT_TND') if q4 else None
-                        except Exception:
-                            v = None
-                        try:
-                            freight_cache[lookup_key] = float(v) if v not in (None, '') else None
-                        except Exception:
-                            freight_cache[lookup_key] = None
-                    if freight_cache.get(lookup_key) is not None:
-                        row['montant_ht_tnd'] = freight_cache.get(lookup_key)
+                    refs_to_lookup.add(inv)
             except Exception:
-                # don't fail the whole request on a single row error
+                continue
+
+        # Batch fetch sums from View_FREIGHT_TND by NumFact (refs)
+        try:
+            if refs_to_lookup:
+                params = {}
+                placeholders = []
+                for i, r in enumerate(sorted(refs_to_lookup)):
+                    key = f"r{i}"
+                    placeholders.append(f":{key}")
+                    params[key] = r
+                sql = text(f"SELECT FF_D_NumFact AS ref, SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_NumFact IN ({', '.join(placeholders)}) GROUP BY FF_D_NumFact")
+                rows_q = db.session.execute(sql, params).mappings().all()
+                for r in rows_q:
+                    freight_cache[str(r.get('ref'))] = float(r.get('s') or 0)
+        except Exception:
+            pass
+
+        # Batch fetch sums from View_FREIGHT_TND by (dossier, house)
+        try:
+            if pairs_to_lookup:
+                # collect unique dossiers and houses for WHERE IN filter
+                dossiers = sorted({d for d, h in pairs_to_lookup})
+                houses = sorted({h for d, h in pairs_to_lookup})
+                params = {}
+                d_place = []
+                h_place = []
+                for i, d in enumerate(dossiers):
+                    k = f"d{i}"
+                    d_place.append(f":{k}")
+                    params[k] = d
+                for j, h in enumerate(houses):
+                    k = f"h{j}"
+                    h_place.append(f":{k}")
+                    params[k] = h
+
+                sql = text(f"SELECT FF_D_Dossier AS dossier, FF_D_House AS house, SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_Dossier IN ({', '.join(d_place)}) AND FF_D_House IN ({', '.join(h_place)}) GROUP BY FF_D_Dossier, FF_D_House")
+                rows_q = db.session.execute(sql, params).mappings().all()
+                for r in rows_q:
+                    key = f"{r.get('dossier')}::{r.get('house')}"
+                    freight_cache[key] = float(r.get('s') or 0)
+        except Exception:
+            pass
+
+        # Apply fetched values to rows where available
+        for row in details:
+            try:
+                if row.get('montant_ht_tnd') not in (None, ''):
+                    continue
+                inv = row.get('invoice_num')
+                dossier = row.get('dossier')
+                house = row.get('house')
+                found = None
+                if dossier and house:
+                    found = freight_cache.get(f"{dossier}::{house}")
+                if found is None and inv:
+                    found = freight_cache.get(str(inv))
+                if found is not None:
+                    row['montant_ht_tnd'] = found
+            except Exception:
                 continue
 
         return jsonify({'count': len(details), 'details': details})
@@ -1144,23 +1167,23 @@ def get_ff_list():
             factures = [dict(row) for row in rows]
 
         # Post-process factures to populate total_ht_tnd when missing/null.
+        # Compute simple cases first and collect keys for batch lookup to avoid per-row DB queries.
         freight_cache = {}
+        refs_to_lookup = set()
+        pairs_to_lookup = set()
+
         for f in factures:
             try:
                 if f.get('total_ht_tnd') not in (None, ''):
-                    # ensure numeric
                     try:
                         f['total_ht_tnd'] = float(f.get('total_ht_tnd'))
                         continue
                     except Exception:
                         pass
 
-                # Try compute from total_ttc - ff_total_tva when both present
                 ttc = f.get('total_ttc')
                 tva = f.get('ff_total_tva')
                 f_dev = (f.get('devise') or '').strip().upper()
-                # Compute HT if totals are present and either currency is TND/unknown,
-                # or requested type is Timbrage and currency != TND
                 compute_tot_ht = False
                 if ttc not in (None, '') and tva not in (None, ''):
                     if f_dev in ('', 'TND'):
@@ -1175,39 +1198,106 @@ def get_ff_list():
                     except Exception:
                         pass
 
-                # last resort: lookup in View_FREIGHT_TND by reference or dossier+house
                 ref = f.get('reference') or f.get('FF_H_NumFact') or f.get('reference')
                 dossier = f.get('dossier')
                 house = f.get('house')
-                lookup_key = None
                 if dossier and house:
-                    lookup_key = f"{dossier}::{house}"
+                    pairs_to_lookup.add((dossier, house))
                 elif ref:
-                    lookup_key = ref
+                    refs_to_lookup.add(ref)
+            except Exception:
+                continue
 
-                if lookup_key:
-                    if lookup_key not in freight_cache:
-                        try:
-                            v = None
-                            if dossier and house:
-                                q = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
-                                v = q.get('s') if q else None
-                            if v in (None, 0) and ref:
-                                q2 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_NumFact = :ref"), {'ref': ref}).mappings().first()
-                                v = q2.get('s') if q2 else None
-                            # fallback to Dashboard.dbo
-                            if v in (None, 0):
-                                if dossier and house:
-                                    q3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_Dossier = :d AND FF_D_House = :h"), {'d': dossier, 'h': house}).mappings().first()
-                                    v = q3.get('s') if q3 else None
-                                if v in (None,0) and ref:
-                                    q4 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_NumFact = :ref"), {'ref': ref}).mappings().first()
-                                    v = q4.get('s') if q4 else None
-                            freight_cache[lookup_key] = float(v) if v not in (None, '') else None
-                        except Exception:
-                            freight_cache[lookup_key] = None
-                    if freight_cache.get(lookup_key) is not None:
-                        f['total_ht_tnd'] = freight_cache.get(lookup_key)
+        # Batch queries: by NumFact and by (dossier, house)
+        try:
+            if refs_to_lookup:
+                params = {}
+                placeholders = []
+                for i, r in enumerate(sorted(refs_to_lookup)):
+                    key = f"r{i}"
+                    placeholders.append(f":{key}")
+                    params[key] = r
+                sql = text(f"SELECT FF_D_NumFact AS ref, SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_NumFact IN ({', '.join(placeholders)}) GROUP BY FF_D_NumFact")
+                rows_q = db.session.execute(sql, params).mappings().all()
+                for r in rows_q:
+                    freight_cache[str(r.get('ref'))] = float(r.get('s') or 0)
+        except Exception:
+            pass
+
+        try:
+            if pairs_to_lookup:
+                dossiers = sorted({d for d, h in pairs_to_lookup})
+                houses = sorted({h for d, h in pairs_to_lookup})
+                params = {}
+                d_place = []
+                h_place = []
+                for i, d in enumerate(dossiers):
+                    k = f"d{i}"
+                    d_place.append(f":{k}")
+                    params[k] = d
+                for j, h in enumerate(houses):
+                    k = f"h{j}"
+                    h_place.append(f":{k}")
+                    params[k] = h
+                sql = text(f"SELECT FF_D_Dossier AS dossier, FF_D_House AS house, SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM dbo.View_FREIGHT_TND WHERE FF_D_Dossier IN ({', '.join(d_place)}) AND FF_D_House IN ({', '.join(h_place)}) GROUP BY FF_D_Dossier, FF_D_House")
+                rows_q = db.session.execute(sql, params).mappings().all()
+                for r in rows_q:
+                    key = f"{r.get('dossier')}::{r.get('house')}"
+                    freight_cache[key] = float(r.get('s') or 0)
+
+                # fallback: try Dashboard.dbo if some keys still missing
+                missing_refs = [r for r in refs_to_lookup if str(r) not in freight_cache]
+                missing_pairs = [p for p in pairs_to_lookup if f"{p[0]}::{p[1]}" not in freight_cache]
+                if missing_refs or missing_pairs:
+                    params2 = {}
+                    placeholders2 = []
+                    if missing_refs:
+                        for i, r in enumerate(sorted(missing_refs)):
+                            key = f"rr{i}"
+                            placeholders2.append(f":{key}")
+                            params2[key] = r
+                        sql2 = text(f"SELECT FF_D_NumFact AS ref, SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_NumFact IN ({', '.join(placeholders2)}) GROUP BY FF_D_NumFact")
+                        rows2 = db.session.execute(sql2, params2).mappings().all()
+                        for r in rows2:
+                            freight_cache[str(r.get('ref'))] = float(r.get('s') or 0)
+
+                    if missing_pairs:
+                        dossiers2 = sorted({d for d, h in missing_pairs})
+                        houses2 = sorted({h for d, h in missing_pairs})
+                        params3 = {}
+                        d_place3 = []
+                        h_place3 = []
+                        for i, d in enumerate(dossiers2):
+                            k = f"dd{i}"
+                            d_place3.append(f":{k}")
+                            params3[k] = d
+                        for j, h in enumerate(houses2):
+                            k = f"hh{j}"
+                            h_place3.append(f":{k}")
+                            params3[k] = h
+                        sql3 = text(f"SELECT FF_D_Dossier AS dossier, FF_D_House AS house, SUM(ISNULL(FF_D_MontantHT_TND,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE FF_D_Dossier IN ({', '.join(d_place3)}) AND FF_D_House IN ({', '.join(h_place3)}) GROUP BY FF_D_Dossier, FF_D_House")
+                        rows3 = db.session.execute(sql3, params3).mappings().all()
+                        for r in rows3:
+                            key = f"{r.get('dossier')}::{r.get('house')}"
+                            freight_cache[key] = float(r.get('s') or 0)
+        except Exception:
+            pass
+
+        # Assign found totals back to factures
+        for f in factures:
+            try:
+                if f.get('total_ht_tnd') not in (None, ''):
+                    continue
+                ref = f.get('reference') or f.get('FF_H_NumFact') or f.get('reference')
+                dossier = f.get('dossier')
+                house = f.get('house')
+                val = None
+                if dossier and house:
+                    val = freight_cache.get(f"{dossier}::{house}")
+                if val is None and ref:
+                    val = freight_cache.get(str(ref))
+                if val is not None:
+                    f['total_ht_tnd'] = val
             except Exception:
                 continue
         return jsonify({'factures': factures, 'total': len(factures)})

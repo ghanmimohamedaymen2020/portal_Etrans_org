@@ -19,107 +19,31 @@
   --transition: all 0.3s ease;
 }
 
-/* Indicateur de chargement global */
-.loading-overlay {
+/* Global loader overlay */
+.global-loader {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(3px);
-  display: flex;
-  justify-content: center;
+  inset: 0;
+  display: none;
   align-items: center;
-  z-index: 10000;
-  transition: opacity 0.3s ease;
+  justify-content: center;
+  background: rgba(255,255,255,0.6);
+  z-index: 12000;
 }
-
-.loading-overlay.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.loading-spinner {
-  text-align: center;
-  background: white;
-  padding: 30px 40px;
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-  animation: fadeInUp 0.3s ease;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.spinner {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 20px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid var(--color-secondary);
+.global-loader.visible { display: flex; }
+.global-loader .spinner {
+  width: 72px;
+  height: 72px;
+  border: 8px solid rgba(0,0,0,0.08);
+  border-top-color: var(--color-secondary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-spinner p {
+.global-loader .loader-text {
+  margin-top: 10px;
+  font-weight: 600;
   color: var(--color-primary);
-  font-size: 1.1rem;
-  font-weight: 500;
-  margin: 0;
 }
-
-.loading-spinner .loading-subtitle {
-  color: #666;
-  font-size: 0.9rem;
-  margin-top: 8px;
-}
-
-/* Loading inline pour les tableaux */
-.list-loading-enhanced {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px !important;
-  background: #f9f9f9;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.list-loading-enhanced .spinner-small {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #e0e0e0;
-  border-top: 3px solid var(--color-secondary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 15px;
-}
-
-.list-loading-enhanced p {
-  color: #666;
-  font-size: 1rem;
-  margin: 5px 0;
-}
-
-.list-loading-enhanced .loading-details {
-  color: #999;
-  font-size: 0.85rem;
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 main {
   max-width: 1400px;
@@ -141,7 +65,8 @@ body.list-only main {
   height: calc(100vh - 81px);
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+              setKpiValue('generated', agg.total || 0);
+              if (listLoading) listLoading.classList.remove('visible');
   align-items: stretch;
   overflow: hidden;
 }
@@ -367,7 +292,6 @@ width: 100%;
   overflow-x: auto;
 }
 
-/* ===== CORRECTION UNIQUEMENT DE LA HAUTEUR DES EN-TÊTES ===== */
 .list-table th,
 .list-table td {
   padding: 4px 6px;
@@ -375,63 +299,24 @@ width: 100%;
   text-align: left;
 }
 
-/* Correction spécifique pour les en-têtes - hauteur fixe */
 .list-table th {
   color: #666;
   font-weight: 600;
   background: #f8f9fa;
-  height: 36px !important;
-  max-height: 36px !important;
-  line-height: 24px !important;
-  padding-top: 6px !important;
-  padding-bottom: 6px !important;
-  vertical-align: middle;
 }
 
-/* Les lignes du tableau conservent leur hauteur automatique */
-.list-table td {
-  padding: 6px 6px;
-  height: auto;
-  line-height: normal;
-}
-
-/* Force a fixed row height when the result set is small (less than 20 rows)
-   so rows do not expand to fill the available table/container height. */
-.list-table.fixed-rows tbody tr {
-  height: 42px; /* fixed visual row height */
-}
-.list-table.fixed-rows td {
-  height: 42px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-.list-table.fixed-rows td .cell-content{
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* En-têtes triables - position de l'icône corrigée */
+/* Sortable header styles */
 .list-table th.sortable {
   cursor: pointer;
   user-select: none;
-  position: relative;
-  padding-right: 20px !important;
 }
-
 .list-table th.sortable::after {
   content: '';
   display: inline-block;
-  margin-left: 4px;
+  margin-left: 8px;
   font-size: 0.75rem;
   opacity: 0.7;
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
 }
-
 .list-table th.sortable.sort-asc::after { content: '▲'; }
 .list-table th.sortable.sort-desc::after { content: '▼'; }
 
@@ -445,39 +330,11 @@ width: 100%;
   max-height: 100%;
 }
 
-/* When the table uses fixed row heights for small lists, don't force
-   the container to stretch; let it size to content instead. */
-.table-responsive.fixed-auto-height {
-  height: auto !important;
-  max-height: none !important;
-}
-
 .list-table thead th {
   position: sticky;
   top: 0;
   z-index: 3;
   background: #f8f9fa;
-}
-
-/* Compact rows: used when the list is short to reduce row height
-   and clamp long cell content to a small number of lines. */
-.list-table.compact-rows td {
-  padding: 2px 6px;
-}
-.list-table td .cell-content{
-  display: block;
-  /* truncate long cell text to approximately 45 characters and show ellipsis */
-  max-width: 45ch;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.list-table.compact-rows td .cell-content{
-  display: -webkit-box;
-  -webkit-line-clamp: 2; /* show at most 2 lines in compact mode */
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .column-toggle {
@@ -739,15 +596,6 @@ body.chart-only.show-chart-list .list-section {
 {% endblock %}
 
 {% block content %}
-<!-- Indicateur de chargement global -->
-<div id="loading-overlay" class="loading-overlay">
-  <div class="loading-spinner">
-    <div class="spinner"></div>
-    <p>Chargement des données...</p>
-    <div class="loading-subtitle" id="loading-message">Veuillez patienter</div>
-  </div>
-</div>
-
 <div class="dashboard-header">
   <div class="welcome-section">
     <h1>Dashboard management</h1>
@@ -793,6 +641,14 @@ body.chart-only.show-chart-list .list-section {
       <div class="kpi-title">Factures - Magasinage (mois)</div>
       <div class="kpi-value" data-kpi-value="invoices-magasinage">0</div>
     </div>
+</div>
+
+<!-- Global loader overlay -->
+<div id="global-loader" class="global-loader" aria-hidden="true">
+  <div style="text-align:center">
+    <div class="spinner" role="status" aria-hidden="true"></div>
+    <div class="loader-text">Chargement…</div>
+  </div>
 </div>
 
 <div class="charts-section">
@@ -970,45 +826,7 @@ body.chart-only.show-chart-list .list-section {
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Fonctions pour gérer l'indicateur de chargement
-function showLoading(message = 'Chargement des données...') {
-  const overlay = document.getElementById('loading-overlay');
-  const messageEl = document.getElementById('loading-message');
-  if (overlay) {
-    messageEl.textContent = message;
-    overlay.classList.remove('hidden');
-  }
-}
-
-function hideLoading() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) {
-    overlay.classList.add('hidden');
-  }
-}
-
-// Indicateur de chargement pour les opérations longues
-function withLoading(fn, message = 'Chargement...') {
-  return async function(...args) {
-    try {
-      showLoading(message);
-      return await fn(...args);
-    } finally {
-      hideLoading();
-    }
-  };
-}
-
 document.addEventListener('DOMContentLoaded',function(){
-  // Afficher le chargement si on est en mode liste
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('listOnly')) {
-    showLoading('Chargement de la liste des factures...');
-  }
-  
-  // Masquer le chargement après 2 secondes maximum (au cas où)
-  setTimeout(hideLoading, 2000);
-  
   const listSection=document.getElementById('list-section');
   const listTitle=document.getElementById('list-title');
   const listCount=document.getElementById('list-count');
@@ -1038,12 +856,6 @@ document.addEventListener('DOMContentLoaded',function(){
   let deviseChart=null;
   // Global cache for monthly activity (shared across functions)
   window.monthlyActivityCache = window.monthlyActivityCache || null;
-
-  // Simple HTML-escape helper for title attributes
-  function escapeHtml(s){
-    if(s===null||s===undefined) return '';
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
 
   function storageKey(){
     return `mgmt_hidden_cols_${currentListKey||'default'}`;
@@ -1280,6 +1092,37 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   }
 
+  // Global loader control (syncs with the inline `listLoading` indicator)
+  function showGlobalLoader(text){
+    const gl = document.getElementById('global-loader');
+    if(!gl) return;
+    try{ if(text) gl.querySelector('.loader-text').textContent = text; }catch(e){}
+    gl.classList.add('visible');
+    gl.setAttribute('aria-hidden','false');
+  }
+  function hideGlobalLoader(){
+    const gl = document.getElementById('global-loader');
+    if(!gl) return;
+    gl.classList.remove('visible');
+    gl.setAttribute('aria-hidden','true');
+  }
+
+  // If `listLoading` is present, observe its class toggles and mirror them
+  // to the global loader to avoid editing every call site.
+  try{
+    if(listLoading){
+      const mo = new MutationObserver(muts=>{
+        muts.forEach(m=>{
+          if(m.attributeName === 'class'){
+            const cls = m.target.classList;
+            if(cls && cls.contains('visible')) showGlobalLoader(); else hideGlobalLoader();
+          }
+        });
+      });
+      mo.observe(listLoading,{ attributes:true, attributeFilter:['class'] });
+    }
+  }catch(e){ /* no-op */ }
+
   function formatDateValue(value){
     if(!value) return value;
     const date=new Date(value);
@@ -1410,6 +1253,7 @@ document.addEventListener('DOMContentLoaded',function(){
         if(key==='not-stamped'||key==='invoices'){
       try{
         if(listLoading) listLoading.classList.add('visible');
+        if(typeof showGlobalLoader === 'function') showGlobalLoader();
             if(key==='invoices'){
               // fetch FF-based invoices used by charts for the selected month/year
               let monthFilter=null;
@@ -1491,12 +1335,12 @@ document.addEventListener('DOMContentLoaded',function(){
         return;
       }finally{
         if(listLoading) listLoading.classList.remove('visible');
-        hideLoading(); // Cacher l'indicateur de chargement global
       }
     }
     if(key==='generated'){
       try{
         if(listLoading) listLoading.classList.add('visible');
+        if(typeof showGlobalLoader === 'function') showGlobalLoader();
         items=await fetchFreightItems();
         // show export button for generated freight items
         if(exportCsvBtn){
@@ -1517,7 +1361,6 @@ document.addEventListener('DOMContentLoaded',function(){
         return;
       }finally{
         if(listLoading) listLoading.classList.remove('visible');
-        hideLoading();
       }
     }
     if(key==='generated'){
@@ -1559,7 +1402,6 @@ document.addEventListener('DOMContentLoaded',function(){
       return;
     }
     applySearchFilter();
-    hideLoading(); // S'assurer que le chargement est caché à la fin
   }
 
   async function initKpiCounts(){
@@ -1731,7 +1573,12 @@ document.addEventListener('DOMContentLoaded',function(){
     const start=size>0?(currentPage-1)*size:0;
     const end=size>0?start+size:filtered.length;
     const limited=size>0?filtered.slice(start,end):filtered;
+    // If the list-loading indicator is visible, do not show the "no data" message yet
     listTableBody.innerHTML='';
+    if(listLoading && listLoading.classList && listLoading.classList.contains('visible')){
+      // still loading — keep the table empty (global loader visible)
+      return;
+    }
     if(!limited.length){
       listTableBody.innerHTML=`
         <tr>
@@ -1773,8 +1620,7 @@ document.addEventListener('DOMContentLoaded',function(){
             }
           }
         }catch(e){ /* ignore formatting errors */ }
-        const plainText = (value===null || value===undefined || typeof value==='object') ? '' : String(value);
-        return `<td data-col="${col.key}" class="${hiddenClass}" title="${escapeHtml(plainText)}"><div class="cell-content">${cellHtml}</div></td>`;
+        return `<td data-col="${col.key}" class="${hiddenClass}">${cellHtml}</td>`;
       }).join('');
       if(currentListKey==='generated'&&listMode==='summary'){
         tr.classList.add('clickable-row');
@@ -1789,21 +1635,6 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       listTableBody.appendChild(tr);
     });
-    // Toggle compact rows: enable compact mode when the result set is large
-    // Also enforce fixed row height when the result set is small (<20 rows)
-    try{
-      const table = document.getElementById('list-table');
-      const tableContainer = document.querySelector('.table-responsive');
-      const compact = filtered.length >= 20; // compact for 20+ rows
-      const fixedRows = filtered.length < 20; // fixed height for small lists
-      if(table){
-        table.classList.toggle('compact-rows', compact);
-        table.classList.toggle('fixed-rows', fixedRows);
-      }
-      if(tableContainer){
-        tableContainer.classList.toggle('fixed-auto-height', fixedRows);
-      }
-    }catch(e){ }
     updateCount(limited.length,filtered.length);
     updatePagination(limited.length,filtered.length,totalPages);
   }
@@ -1895,7 +1726,7 @@ document.addEventListener('DOMContentLoaded',function(){
     caSelectElem.addEventListener('change', function(){ applyCAMode(this.value); });
   }
 
-  // reuse `urlParams` declared earlier in this DOMContentLoaded scope
+  const urlParams=new URLSearchParams(window.location.search);
   const listParam=urlParams.get('list');
   const listOnlyParam=urlParams.get('listOnly');
   const chartParam=urlParams.get('chart');
@@ -2830,9 +2661,6 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   loadActivityData();
-  
-  // Cacher le chargement après 5 secondes maximum (sécurité)
- setTimeout(hideLoading, 5000);
 });
 </script>
 {% endblock %}
