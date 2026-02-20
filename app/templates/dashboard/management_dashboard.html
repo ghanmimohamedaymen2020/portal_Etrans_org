@@ -1663,19 +1663,27 @@ document.addEventListener('DOMContentLoaded',function(){
           // ignore
         }
         
-        // MAGASINAGE KPI neutralized per user request — set zeros and skip API calls
+        // MAGASINAGE KPI — fetch totals and display
         try {
-          setKpiValue('invoices-magasinage', '0 TND');
-          setKpiValue('invoices-magasinage-tht-month', '0 TND');
-          setKpiValue('invoices-magasinage-tht-year', '0 TND');
-        } catch(e) { console.error('Error setting magasinage KPI to zero', e); }
+          const mResp = await fetch(`/api/factures/magasinage-totals?year=${curYear}&month=${curMonth}`, { credentials: 'include' });
+          if (mResp.ok) {
+            const mJson = await mResp.json();
+            setKpiValue('invoices-magasinage', formatAmount(mJson.total_ttc || 0) + ' TND');
+            setKpiValue('invoices-magasinage-tht-month', formatAmount(mJson.total_ht || 0) + ' TND');
+            setKpiValue('invoices-magasinage-tht-year', formatAmount(mJson.total_year_ht || 0) + ' TND');
+          }
+        } catch(e) { console.error('Error fetching magasinage KPI', e); }
         
-        // SURESTARIE KPI neutralized per user request — set zeros and skip API calls
+        // SURESTARIE KPI — fetch totals and display
         try {
-          setKpiValue('invoices-surestarie', '0 TND');
-          setKpiValue('invoices-surestarie-tht-month', '0 TND');
-          setKpiValue('invoices-surestarie-tht-year', '0 TND');
-        } catch(e) { console.error('Error setting surestarie KPI to zero', e); }
+          const sResp = await fetch(`/api/factures/surestarie-totals?year=${curYear}&month=${curMonth}`, { credentials: 'include' });
+          if (sResp.ok) {
+            const sJson = await sResp.json();
+            setKpiValue('invoices-surestarie', formatAmount(sJson.total_ttc || 0) + ' TND');
+            setKpiValue('invoices-surestarie-tht-month', formatAmount(sJson.total_ht || 0) + ' TND');
+            setKpiValue('invoices-surestarie-tht-year', formatAmount(sJson.total_year_ht || 0) + ' TND');
+          }
+        } catch(e) { console.error('Error fetching surestarie KPI', e); }
         
         // ============================================
         // FREIGHT - Totaux mensuel et annuel

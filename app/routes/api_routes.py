@@ -559,8 +559,41 @@ def get_ca_activite_total():
         from datetime import datetime
         year = datetime.utcnow().year
 
-    # CA-activite-total calculations removed by user request — return empty.
-    return jsonify({'year': year, 'month': month, 'rows': []})
+    try:
+        params = {'year': year}
+        where = "YEAR(e.FF_H_DateProcess) = :year"
+        if month:
+            where += " AND MONTH(e.FF_H_DateProcess) = :month"
+            params['month'] = month
+        if req_type:
+            where += " AND UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = :type"
+            params['type'] = str(req_type).upper()
+
+        # Sum submitted + non-submitted totals from View_FF_Total when available
+        sql = text(f"""
+            SELECT
+                SUM(COALESCE(t.FF_T_TotalSoumis,0) + COALESCE(t.FF_T_TotalNonSoumis,0)) AS total_soum_non,
+                SUM(COALESCE(t.FF_T_TotalSoumis,0)) AS total_soumis,
+                SUM(COALESCE(t.FF_T_TotalNonSoumis,0)) AS total_non_soumis,
+                SUM(COALESCE(t.FF_T_TotalTTC,0)) AS total_ttc
+            FROM dbo.View_FF_Total t
+            INNER JOIN dbo.View_FF_Entete e ON t.FF_T_NumFact = e.FF_H_NumFact
+            WHERE {where}
+        """)
+
+        row = db.session.execute(sql, params).mappings().first()
+        if not row:
+            return jsonify({'year': year, 'month': month, 'rows': []})
+        return jsonify({
+            'year': year,
+            'month': month,
+            'total_soumis': float(row.get('total_soumis') or 0),
+            'total_non_soumis': float(row.get('total_non_soumis') or 0),
+            'total_soum_non': float(row.get('total_soum_non') or 0),
+            'total_ttc': float(row.get('total_ttc') or 0)
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
 
 
 @api_bp.route('/factures/agent-totals', methods=['GET'])
@@ -594,9 +627,80 @@ def get_agent_totals():
         if 'FF_H_TypeFacture' not in entete_cols or 'FF_H_NumFact' not in entete_cols or 'FF_H_DateProcess' not in entete_cols:
             return jsonify({'error':'Colonnes manquantes dans View_FF_Entete','missing': []}), 500
 
-        # use shared helper to ensure same logic as monthly histogram
-        totals = get_agent_totals_for_month(db, year, month)
-        return jsonify({'year': year, 'month': month, 'totals': totals})
+        # compute totals per currency from detail rows for Agent invoices (type 'A')
+        try:
+            sql = text("""
+                SELECT d.FF_D_Devise AS devise, SUM(ISNULL(d.FF_D_MontantTTC,0)) AS s
+                FROM dbo.View_FF_Detail d
+                JOIN dbo.View_FF_Entete e ON e.FF_H_NumFact = d.FF_D_NumFact
+                WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'A'
+                  AND YEAR(e.FF_H_DateProcess) = :year
+                  AND MONTH(e.FF_H_DateProcess) = :month
+                GROUP BY d.FF_D_Devise
+            """)
+            rows = db.session.execute(sql, {'year': year, 'month': month}).mappings().all()
+            totals = {r.get('devise') or 'UNKNOWN': float(r.get('s') or 0) for r in rows}
+            return jsonify({'year': year, 'month': month, 'totals': totals})
+        except Exception as exc:
+            return jsonify({'error': str(exc)}), 500
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/debug/agent-sample', methods=['GET'])
+@login_required
+def debug_agent_sample():
+    """Temporary debug endpoint: returns count, totals per currency and sample rows for Agent invoices."""
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+    if not year:
+        from datetime import datetime
+        year = datetime.utcnow().year
+    if month is None:
+        from datetime import datetime
+        month = datetime.utcnow().month
+
+    try:
+        # count
+        cnt_sql = text("""
+            SELECT COUNT(DISTINCT e.FF_H_NumFact) AS cnt
+            FROM dbo.View_FF_Entete e
+            JOIN dbo.View_FF_Detail d ON e.FF_H_NumFact = d.FF_D_NumFact
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'A'
+              AND YEAR(e.FF_H_DateProcess) = :year
+              AND MONTH(e.FF_H_DateProcess) = :month
+        """)
+        cnt_row = db.session.execute(cnt_sql, {'year': year, 'month': month}).mappings().first()
+        cnt = int(cnt_row.get('cnt') or 0)
+
+        # totals by currency
+        totals_sql = text("""
+            SELECT d.FF_D_Devise AS devise, SUM(ISNULL(d.FF_D_MontantTTC,0)) AS total_ttc
+            FROM dbo.View_FF_Detail d
+            JOIN dbo.View_FF_Entete e ON e.FF_H_NumFact = d.FF_D_NumFact
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'A'
+              AND YEAR(e.FF_H_DateProcess) = :year
+              AND MONTH(e.FF_H_DateProcess) = :month
+            GROUP BY d.FF_D_Devise
+        """)
+        rows = db.session.execute(totals_sql, {'year': year, 'month': month}).mappings().all()
+        totals = {r.get('devise') or 'UNKNOWN': float(r.get('total_ttc') or 0) for r in rows}
+
+        # sample rows
+        sample_sql = text("""
+            SELECT TOP 20 e.FF_H_NumFact AS reference, e.FF_H_DateProcess AS date_process,
+                   e.FF_H_TypeFacture AS type_facture, d.FF_D_Devise AS devise, d.FF_D_MontantTTC AS montant_ttc
+            FROM dbo.View_FF_Entete e
+            JOIN dbo.View_FF_Detail d ON e.FF_H_NumFact = d.FF_D_NumFact
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'A'
+              AND YEAR(e.FF_H_DateProcess) = :year
+              AND MONTH(e.FF_H_DateProcess) = :month
+            ORDER BY e.FF_H_DateProcess DESC
+        """)
+        sample_rows = db.session.execute(sample_sql, {'year': year, 'month': month}).mappings().all()
+        sample = [dict(r) for r in sample_rows]
+
+        return jsonify({'year': year, 'month': month, 'count': cnt, 'totals': totals, 'sample': sample})
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
