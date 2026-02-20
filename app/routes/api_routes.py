@@ -1619,21 +1619,73 @@ def export_ff_list_csv():
         entete_set = {c for c in entete_cols}
         total_set = {c for c in total_cols}
 
-        # Build SELECT list: include all columns from entete and total views
-        select_parts = []
-        # entete columns (prefix with e.)
-        for c in sorted(entete_set):
-            select_parts.append(f"e.{c} AS {c}")
-        # totals columns (prefix with t.), avoid duplicate names
-        for c in sorted(total_set):
-            if c not in entete_set:
-                select_parts.append(f"t.{c} AS {c}")
+        # Build SELECT list based on application-visible columns (invoices view)
+        # Map UI column keys to DB expressions; keep checks to avoid SQL errors
+        req_type = request.args.get('type')
+        # Default invoices column keys (matching `columnSets.invoices` in the UI)
+        ui_invoice_cols = ['reference','date_process','dossier','nom_client','eta','house','cont_info','service','nom_commercial','ff_total_non_soumis','ff_total_soumis','ff_total_tva','total_ttc','devise']
+        ui_agent_cols = ['reference','date_process','dossier','nom_client','eta','house','service','ff_total_non_soumis','ff_total_soumis','ff_total_tva','total_ttc','devise']
+        cols_to_use = ui_agent_cols if (req_type and str(req_type).upper() == 'A') else ui_invoice_cols
 
-        # Add computed cont_info column (keeps export friendly) — raw FF_H_EquipoCont is already included above if present
-        if 'FF_H_EquipoCont' in entete_set:
-            select_parts.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '% 2 %' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%22%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
-        else:
-            select_parts.append("NULL AS cont_info")
+        select_parts = []
+        for key in cols_to_use:
+            if key == 'reference':
+                # prefer totals view numfact when available
+                if 'FF_T_NumFact' in total_set:
+                    select_parts.append('COALESCE(t.FF_T_NumFact, e.FF_H_NumFact) AS reference')
+                else:
+                    select_parts.append('e.FF_H_NumFact AS reference')
+            elif key == 'date_process':
+                select_parts.append('e.FF_H_DateProcess AS date_process')
+            elif key == 'dossier':
+                if 'FF_T_Dossier' in total_set:
+                    select_parts.append("COALESCE(t.FF_T_Dossier, e.FF_H_Dossier) AS dossier")
+                else:
+                    select_parts.append('e.FF_H_Dossier AS dossier')
+            elif key == 'nom_client':
+                select_parts.append('e.FF_H_NomClient AS nom_client' if 'FF_H_NomClient' in entete_set else "NULL AS nom_client")
+            elif key == 'eta':
+                select_parts.append('e.FF_H_ETA AS eta' if 'FF_H_ETA' in entete_set else "NULL AS eta")
+            elif key == 'house':
+                if 'FF_T_House' in total_set:
+                    select_parts.append("COALESCE(t.FF_T_House, e.FF_H_House) AS house")
+                else:
+                    select_parts.append('e.FF_H_House AS house' if 'FF_H_House' in entete_set else "NULL AS house")
+            elif key == 'cont_info':
+                if 'FF_H_EquipoCont' in entete_set:
+                    select_parts.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '% 2 %' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%22%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
+                else:
+                    select_parts.append("NULL AS cont_info")
+            elif key == 'service':
+                select_parts.append('e.FF_H_Service AS service' if 'FF_H_Service' in entete_set else "NULL AS service")
+            elif key == 'nom_commercial':
+                if 'FF_H_NomCommercial' in entete_set:
+                    select_parts.append('e.FF_H_NomCommercial AS nom_commercial')
+                elif 'FF_H_IdCommercial' in entete_set:
+                    select_parts.append('e.FF_H_IdCommercial AS nom_commercial')
+                else:
+                    select_parts.append("NULL AS nom_commercial")
+            elif key == 'ff_total_non_soumis':
+                select_parts.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis' if 'FF_T_TotalNonSoumis' in total_set else "NULL AS ff_total_non_soumis")
+            elif key == 'ff_total_soumis':
+                select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis' if 'FF_T_TotalSoumis' in total_set else "NULL AS ff_total_soumis")
+            elif key == 'ff_total_tva':
+                select_parts.append('t.FF_T_TotalTVA AS ff_total_tva' if 'FF_T_TotalTVA' in total_set else "NULL AS ff_total_tva")
+            elif key == 'total_ttc':
+                select_parts.append('t.FF_T_TotalTTC AS total_ttc' if 'FF_T_TotalTTC' in total_set else "NULL AS total_ttc")
+            elif key == 'devise':
+                if req_type and str(req_type).upper() in ('T','M','S'):
+                    select_parts.append("'TND' AS devise")
+                else:
+                    select_parts.append("(SELECT TOP 1 FF_D_Devise FROM dbo.View_FF_Detail d WHERE d.FF_D_NumFact = e.FF_H_NumFact) AS devise")
+            else:
+                # generic fallback: try entete then totals
+                if key in entete_set:
+                    select_parts.append(f"e.{key} AS {key}")
+                elif key in total_set:
+                    select_parts.append(f"t.{key} AS {key}")
+                else:
+                    select_parts.append(f"NULL AS {key}")
 
         # Build WHERE clause with optional type filter (respect existing schema)
         where_clauses = ["MONTH(e.FF_H_DateProcess) = :month", "YEAR(e.FF_H_DateProcess) = :year"]
@@ -1683,8 +1735,27 @@ def export_ff_list_csv():
             })
 
         headers = list(rows[0].keys())
+        # Map DB column names to friendly labels used in the application UI
+        label_map = {
+            'FF_H_NumFact': 'Numéro facture',
+            'FF_H_DateProcess': 'Date Process',
+            'FF_H_Dossier': 'Dossier',
+            'FF_H_NomClient': 'Agent',
+            'FF_H_ETA': 'ETA',
+            'FF_H_House': 'House',
+            'FF_H_Service': 'Service',
+            'FF_H_NomCommercial': 'Nom Commercial',
+            'FF_H_IdCommercial': 'Nom Commercial',
+            'FF_T_TotalNonSoumis': 'Total Non Soumis',
+            'FF_T_TotalSoumis': 'Total Soumis',
+            'FF_T_TotalTVA': 'Total TVA',
+            'FF_T_TotalTTC': 'Total TTC',
+            'cont_info': 'Conteneur',
+            'FF_H_EquipoCont': 'FF_H_EquipoCont'
+        }
         writer = csv.writer(output, delimiter=';')
-        writer.writerow(headers)
+        # write friendly headers (preserve column order)
+        writer.writerow([label_map.get(h, h) for h in headers])
         for r in rows:
             writer.writerow([r.get(h) for h in headers])
 
