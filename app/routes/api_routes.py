@@ -1619,49 +1619,21 @@ def export_ff_list_csv():
         entete_set = {c for c in entete_cols}
         total_set = {c for c in total_cols}
 
-        select_parts = [
-            'e.FF_H_DateProcess AS date_process',
-            'e.FF_H_Dossier AS dossier'
-        ]
-        if 'FF_H_NomClient' in entete_set:
-            select_parts.append('e.FF_H_NomClient AS nom_client')
-        else:
-            select_parts.append("NULL AS nom_client")
-        if 'FF_H_ETA' in entete_set:
-            select_parts.append('e.FF_H_ETA AS eta')
-        else:
-            select_parts.append("NULL AS eta")
-        if 'FF_H_House' in entete_set:
-            select_parts.append('e.FF_H_House AS house')
-        else:
-            select_parts.append("NULL AS house")
-        if 'FF_H_Service' in entete_set:
-            select_parts.append('e.FF_H_Service AS service')
-        else:
-            select_parts.append("NULL AS service")
-        if 'FF_H_NomCommercial' in entete_set:
-            select_parts.append('e.FF_H_NomCommercial AS nom_commercial')
-        elif 'FF_H_IdCommercial' in entete_set:
-            select_parts.append('e.FF_H_IdCommercial AS nom_commercial')
-        else:
-            select_parts.append("NULL AS nom_commercial")
+        # Build SELECT list: include all columns from entete and total views
+        select_parts = []
+        # entete columns (prefix with e.)
+        for c in sorted(entete_set):
+            select_parts.append(f"e.{c} AS {c}")
+        # totals columns (prefix with t.), avoid duplicate names
+        for c in sorted(total_set):
+            if c not in entete_set:
+                select_parts.append(f"t.{c} AS {c}")
 
-        if 'FF_T_TotalNonSoumis' in total_set:
-            select_parts.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
+        # Add computed cont_info column (keeps export friendly) — raw FF_H_EquipoCont is already included above if present
+        if 'FF_H_EquipoCont' in entete_set:
+            select_parts.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '% 2 %' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%22%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
         else:
-            select_parts.append("NULL AS ff_total_non_soumis")
-        if 'FF_T_TotalSoumis' in total_set:
-            select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis')
-        else:
-            select_parts.append("NULL AS ff_total_soumis")
-        if 'FF_T_TotalTVA' in total_set:
-            select_parts.append('t.FF_T_TotalTVA AS ff_total_tva')
-        else:
-            select_parts.append("NULL AS ff_total_tva")
-        if 'FF_T_TotalTTC' in total_set:
-            select_parts.append('t.FF_T_TotalTTC AS total_ttc')
-        else:
-            select_parts.append("NULL AS total_ttc")
+            select_parts.append("NULL AS cont_info")
 
         # Build WHERE clause with optional type filter (respect existing schema)
         where_clauses = ["MONTH(e.FF_H_DateProcess) = :month", "YEAR(e.FF_H_DateProcess) = :year"]
