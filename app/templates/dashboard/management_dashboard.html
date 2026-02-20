@@ -260,6 +260,20 @@ body.list-only main {
   vertical-align: middle;
 }
 
+/* small badge shown at top-right of KPI cards (used to show counts) */
+.kpi-badge {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
 .list-section {
   display: none;
   background: #fff;
@@ -761,9 +775,10 @@ body.chart-only.show-chart-list .list-section {
     <div class="kpi-sub" style="font-size:0.85rem;color:#000000;"><strong >Ce mois</strong> — <span class="kpi-value-inline" data-kpi-value="generated">0</span></div>
     <div class="kpi-sub" style="font-size:0.85rem;color:#000000;margin-top:4px;"><strong>Année:</strong> <span class="kpi-value-inline" data-kpi-value="generated-year">0</span></div>
   </div>
-  <div class="kpi-card" data-key="not-stamped" style="border-left-color:var(--color-danger);">
+  <div class="kpi-card" data-key="not-stamped" style="border-left-color:var(--color-danger); position:relative;">
+    <div class="kpi-badge" data-kpi-count="not-stamped-count">0</div>
     <div class="kpi-title">Avis non timbrés</div>
-    <div class="kpi-value" data-kpi-value="not-stamped">37</div>
+    <div class="kpi-value" data-kpi-value="not-stamped">0 TND</div>
     <div class="kpi-sub">À traiter</div>
   </div>
   <div class="kpi-card" data-key="not-withdrawn" style="border-left-color:var(--color-warning);">
@@ -1565,17 +1580,42 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function initKpiCounts(){
     try{
-      // Get total not-stamped rows from AA view when available (preferred)
+      // Get aggregated totals/count for Avis non timbrés
       try{
-        const aaResp = await fetch('/api/factures/aa-detail?limit=0');
-        const aaJson = await aaResp.json();
-        const aaCount = (aaJson && aaJson.factures && aaJson.factures.length) || aaJson.total || 0;
-        setKpiValue('not-stamped', aaCount);
+        const aaResp = await fetch('/api/factures/aa-totals', { credentials: 'include' });
+        if (aaResp.ok) {
+          const aaJson = await aaResp.json();
+          const cnt = aaJson.count || 0;
+          // Display sum of soumis + non_soumis (TND)
+          const total_sum = Number(aaJson.total_soumis || 0) + Number(aaJson.total_non_soumis || 0);
+          setKpiValue('not-stamped', formatAmount(total_sum) + ' TND');
+          const badge = document.querySelector('[data-kpi-count="not-stamped-count"]');
+          if (badge) badge.textContent = cnt;
+        } else {
+          // fallback to returning only a count
+          try{
+            const aaResp2 = await fetch('/api/factures/aa-detail?limit=0');
+            const aaJson2 = await aaResp2.json();
+            const aaCount = (aaJson2 && aaJson2.factures && aaJson2.factures.length) || aaJson2.total || 0;
+            const badge = document.querySelector('[data-kpi-count="not-stamped-count"]'); if(badge) badge.textContent = aaCount;
+            setKpiValue('not-stamped', '0 TND');
+          }catch(e2){
+            try{
+              const totalResp = await fetch('/api/factures/count');
+              const totalJson = await totalResp.json();
+              const badge = document.querySelector('[data-kpi-count="not-stamped-count"]'); if(badge) badge.textContent = totalJson.count || 0;
+            }catch(e3){}
+            setKpiValue('not-stamped', '0 TND');
+          }
+        }
       }catch(e){
-        // fallback to FF-based count endpoint
-        const totalResp = await fetch('/api/factures/count');
-        const totalJson = await totalResp.json();
-        setKpiValue('not-stamped', totalJson.count || 0);
+        console.warn('Erreur agrégat AA:', e);
+        try{
+          const totalResp = await fetch('/api/factures/count');
+          const totalJson = await totalResp.json();
+          const badge = document.querySelector('[data-kpi-count="not-stamped-count"]'); if(badge) badge.textContent = totalJson.count || 0;
+        }catch(e2){}
+        setKpiValue('not-stamped', '0 TND');
       }
 
       // Get current month Timbrage total (THT) for the 'invoices' KPI

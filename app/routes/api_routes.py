@@ -382,6 +382,97 @@ def get_factures_aa_detail():
         return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500
 
 
+@api_bp.route('/factures/aa-totals', methods=['GET'])
+@login_required
+def get_aa_totals():
+    """Return aggregated totals and count for Avis (AA) without invoice.
+    Tries multiple strategies: direct sums from View_AA_Total, or joining
+    View_AA_SansFacture to View_AA_Total. Returns totals and computed HT.
+    """
+    try:
+        # detect columns in View_AA_Total
+        aa_total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'
+        """)).scalars().all()
+        aa_total_set = {c for c in aa_total_cols}
+
+        # detect existence of View_AA_SansFacture (for count and join)
+        sans_exists = db.session.execute(text("""
+            SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_SansFacture'
+        """)).fetchone() is not None
+
+        # count of not-stamped notices (prefer View_AA_SansFacture)
+        count = 0
+        if sans_exists:
+            try:
+                cnt_row = db.session.execute(text("SELECT COUNT(1) AS cnt FROM dbo.View_AA_SansFacture")).mappings().first()
+                count = int(cnt_row.get('cnt') or 0)
+            except Exception:
+                count = 0
+
+        total_soumis = 0.0
+        total_non_soumis = 0.0
+        total_tva = 0.0
+
+        # Preferred: sum directly from View_AA_Total if totals columns exist
+        if 'AA_T_TotalSoumis' in aa_total_set or 'AA_T_TotalNonSoumis' in aa_total_set:
+            try:
+                tva_expr = 'SUM(ISNULL(AA_T_TotalTVA,0)) AS total_tva' if 'AA_T_TotalTVA' in aa_total_set else '0 AS total_tva'
+                sql = text(f"SELECT SUM(ISNULL(AA_T_TotalSoumis,0)) AS total_soumis, SUM(ISNULL(AA_T_TotalNonSoumis,0)) AS total_non_soumis, {tva_expr} FROM dbo.View_AA_Total")
+                row = db.session.execute(sql).mappings().first() or {}
+                total_soumis = float(row.get('total_soumis') or 0)
+                total_non_soumis = float(row.get('total_non_soumis') or 0)
+                total_tva = float(row.get('total_tva') or 0)
+                total_ht = (total_soumis + total_non_soumis) - total_tva
+                return jsonify({
+                    'count': count,
+                    'total_soumis': total_soumis,
+                    'total_non_soumis': total_non_soumis,
+                    'total_tva': total_tva,
+                    'total_ht': total_ht
+                })
+            except Exception:
+                # fallback to join-based approach below
+                pass
+
+        # If direct totals not available, try joining SansFacture -> AA_Total
+        if sans_exists:
+            try:
+                aa_total_cols = db.session.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'")).scalars().all()
+                aa_total_set = {c for c in aa_total_cols}
+                aa_join_col = None
+                if 'AA_T_Reference' in aa_total_set:
+                    aa_join_col = 'AA_T_Reference'
+                elif 'AA_T_NumFact' in aa_total_set:
+                    aa_join_col = 'AA_T_NumFact'
+                elif 'AA_T_NumFacture' in aa_total_set:
+                    aa_join_col = 'AA_T_NumFacture'
+
+                if aa_join_col:
+                    tva_expr = 'SUM(ISNULL(at.AA_T_TotalTVA,0)) AS total_tva' if 'AA_T_TotalTVA' in aa_total_set else '0 AS total_tva'
+                    sql = text(f"SELECT SUM(ISNULL(at.AA_T_TotalSoumis,0)) AS total_soumis, SUM(ISNULL(at.AA_T_TotalNonSoumis,0)) AS total_non_soumis, {tva_expr} FROM dbo.View_AA_SansFacture a LEFT JOIN dbo.View_AA_Total at ON at.{aa_join_col} = a.AA_H_Reference")
+                    row = db.session.execute(sql).mappings().first() or {}
+                    total_soumis = float(row.get('total_soumis') or 0)
+                    total_non_soumis = float(row.get('total_non_soumis') or 0)
+                    total_tva = float(row.get('total_tva') or 0)
+                    total_ht = (total_soumis + total_non_soumis) - total_tva
+                    return jsonify({
+                        'count': count,
+                        'total_soumis': total_soumis,
+                        'total_non_soumis': total_non_soumis,
+                        'total_tva': total_tva,
+                        'total_ht': total_ht
+                    })
+            except Exception:
+                pass
+
+        # Final fallback: return count and zeros
+        return jsonify({'count': count, 'total_soumis': 0.0, 'total_non_soumis': 0.0, 'total_tva': 0.0, 'total_ht': 0.0})
+    except Exception as exc:
+        return jsonify({'count': 0, 'total_soumis': 0.0, 'total_non_soumis': 0.0, 'total_tva': 0.0, 'total_ht': 0.0, 'error': str(exc)}), 500
+
+
 @api_bp.route('/factures/details-aa', methods=['GET'])
 @login_required
 def get_aa_details_by_reference():
