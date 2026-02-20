@@ -1254,7 +1254,7 @@ def get_ff_list():
             select_parts.append("NULL AS service")
         # indicate container type 'ISOTANK' when equipment contains '26'
         if 'FF_H_EquipoCont' in entete_set:
-            select_parts.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '%57%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
+            select_parts.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '%57%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%22%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '% 2 %' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
             select_parts.append('e.FF_H_EquipoCont AS ff_equipo')
             select_parts.append('e.FF_H_EquipoCont AS FF_H_EquipoCont')
         else:
@@ -1328,7 +1328,7 @@ def get_ff_list():
             ]
             # include ISOTANK indicator from entete if present
             if 'FF_H_EquipoCont' in entete_set:
-                t_select.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '%57%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
+                t_select.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '%57%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%22%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '% 2 %' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
                 t_select.append('e.FF_H_EquipoCont AS ff_equipo')
                 t_select.append('e.FF_H_EquipoCont AS FF_H_EquipoCont')
             else:
@@ -1570,13 +1570,20 @@ def get_ff_list():
                         eq = str(equipo_map.get(str(ref)) or '').strip()
                         if not eq:
                             continue
-                        # priority: '26' -> ISOTANK, then '57' -> FLEXITANK, then '2' -> FLEXITANK
-                        if '26' in eq:
-                            f['cont_info'] = 'ISOTANK'
-                        elif '57' in eq:
-                            f['cont_info'] = 'FLEXITANK'
-                        elif '2' in eq:
-                            f['cont_info'] = 'FLEXITANK'
+                        # priority: '26' -> ISOTANK, then tokens 2/22/57 -> FLEXITANK
+                        try:
+                            import re
+                            tokens = re.findall(r"\d+", eq)
+                            if any(t == '26' for t in tokens):
+                                f['cont_info'] = 'ISOTANK'
+                            elif any(t in ('2', '22') for t in tokens):
+                                f['cont_info'] = 'FLEXITANK'
+                        except Exception:
+                            # conservative fallback to previous substring checks
+                            if '26' in eq:
+                                f['cont_info'] = 'ISOTANK'
+                            elif '22' in eq or '2' in eq:
+                                f['cont_info'] = 'FLEXITANK'
                     except Exception:
                         continue
         except Exception:
