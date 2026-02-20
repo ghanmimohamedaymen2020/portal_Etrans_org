@@ -647,6 +647,131 @@ def get_agent_totals():
         return jsonify({'error': str(exc)}), 500
 
 
+@api_bp.route('/factures/magasinage-totals', methods=['GET'])
+@login_required
+def get_magasinage_totals():
+    """Return sums for Magasinage invoices (TND) for a month/year."""
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    if month is None or year is None:
+        from datetime import datetime
+        now = datetime.utcnow()
+        if month is None:
+            month = now.month
+        if year is None:
+            year = now.year
+
+    try:
+        # inspect totals view for available columns
+        total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_FF_Total'
+        """)).scalars().all()
+        total_set = {c for c in total_cols}
+
+        # choose TTC and HT columns if available
+        ttc_col = 'FF_T_TotalTTC' if 'FF_T_TotalTTC' in total_set else None
+        ht_col = None
+        for c in ('FF_T_TotalHT_TND', 'FF_T_TotalHT', 'FF_T_Total_HT_TND'):
+            if c in total_set:
+                ht_col = c
+                break
+
+        params = {'month': month, 'year': year}
+        ttc_expr = f"SUM(COALESCE(t.{ttc_col},0)) AS total_ttc" if ttc_col else "0 AS total_ttc"
+        ht_expr = f"SUM(COALESCE(t.{ht_col},0)) AS total_ht" if ht_col else "0 AS total_ht"
+
+        sql = text(f"""
+            SELECT {ttc_expr}, {ht_expr}
+            FROM dbo.View_FF_Total t
+            JOIN dbo.View_FF_Entete e ON t.FF_T_NumFact = e.FF_H_NumFact
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'M'
+              AND MONTH(e.FF_H_DateProcess) = :month
+              AND YEAR(e.FF_H_DateProcess) = :year
+        """)
+
+        row = db.session.execute(sql, params).mappings().first() or {}
+
+        # yearly HT total (same ht_col) for provided year
+        if ht_col:
+            sql_y = text(f"SELECT SUM(COALESCE(t.{ht_col},0)) AS total_year_ht FROM dbo.View_FF_Total t JOIN dbo.View_FF_Entete e ON t.FF_T_NumFact = e.FF_H_NumFact WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'M' AND YEAR(e.FF_H_DateProcess) = :year")
+            ry = db.session.execute(sql_y, {'year': year}).mappings().first() or {}
+            total_year_ht = float(ry.get('total_year_ht') or 0)
+        else:
+            total_year_ht = 0.0
+
+        return jsonify({
+            'month': month,
+            'year': year,
+            'total_ttc': float(row.get('total_ttc') or 0),
+            'total_ht': float(row.get('total_ht') or 0),
+            'total_year_ht': float(total_year_ht)
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/surestarie-totals', methods=['GET'])
+@login_required
+def get_surestarie_totals():
+    """Return sums for Surestarie invoices (TND) for a month/year."""
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    if month is None or year is None:
+        from datetime import datetime
+        now = datetime.utcnow()
+        if month is None:
+            month = now.month
+        if year is None:
+            year = now.year
+
+    try:
+        total_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='View_FF_Total'
+        """)).scalars().all()
+        total_set = {c for c in total_cols}
+
+        ttc_col = 'FF_T_TotalTTC' if 'FF_T_TotalTTC' in total_set else None
+        ht_col = None
+        for c in ('FF_T_TotalHT_TND', 'FF_T_TotalHT', 'FF_T_Total_HT_TND'):
+            if c in total_set:
+                ht_col = c
+                break
+
+        params = {'month': month, 'year': year}
+        ttc_expr = f"SUM(COALESCE(t.{ttc_col},0)) AS total_ttc" if ttc_col else "0 AS total_ttc"
+        ht_expr = f"SUM(COALESCE(t.{ht_col},0)) AS total_ht" if ht_col else "0 AS total_ht"
+
+        sql = text(f"""
+            SELECT {ttc_expr}, {ht_expr}
+            FROM dbo.View_FF_Total t
+            JOIN dbo.View_FF_Entete e ON t.FF_T_NumFact = e.FF_H_NumFact
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'S'
+              AND MONTH(e.FF_H_DateProcess) = :month
+              AND YEAR(e.FF_H_DateProcess) = :year
+        """)
+
+        row = db.session.execute(sql, params).mappings().first() or {}
+
+        if ht_col:
+            sql_y = text(f"SELECT SUM(COALESCE(t.{ht_col},0)) AS total_year_ht FROM dbo.View_FF_Total t JOIN dbo.View_FF_Entete e ON t.FF_T_NumFact = e.FF_H_NumFact WHERE UPPER(LTRIM(RTRIM(ISNULL(e.FF_H_TypeFacture,'')))) = 'S' AND YEAR(e.FF_H_DateProcess) = :year")
+            ry = db.session.execute(sql_y, {'year': year}).mappings().first() or {}
+            total_year_ht = float(ry.get('total_year_ht') or 0)
+        else:
+            total_year_ht = 0.0
+
+        return jsonify({
+            'month': month,
+            'year': year,
+            'total_ttc': float(row.get('total_ttc') or 0),
+            'total_ht': float(row.get('total_ht') or 0),
+            'total_year_ht': float(total_year_ht)
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
 @api_bp.route('/debug/agent-sample', methods=['GET'])
 @login_required
 def debug_agent_sample():
@@ -1127,6 +1252,13 @@ def get_ff_list():
             select_parts.append('e.FF_H_Service AS service')
         else:
             select_parts.append("NULL AS service")
+        # indicate container type 'ISOTANK' when equipment contains '26'
+        if 'FF_H_EquipoCont' in entete_set:
+            select_parts.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '%57%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
+            select_parts.append('e.FF_H_EquipoCont AS ff_equipo')
+            select_parts.append('e.FF_H_EquipoCont AS FF_H_EquipoCont')
+        else:
+            select_parts.append("NULL AS cont_info")
         # Commercial name: include only for non-Agent exports (Agent invoices don't have commercial)
         if not (req_type and str(req_type).upper() == 'A'):
             if 'FF_H_NomCommercial' in entete_set:
@@ -1194,6 +1326,14 @@ def get_ff_list():
                 't.FF_T_House AS house',
                 "COALESCE(e.FF_H_Service, NULL) AS service",
             ]
+            # include ISOTANK indicator from entete if present
+            if 'FF_H_EquipoCont' in entete_set:
+                t_select.append("CASE WHEN e.FF_H_EquipoCont LIKE '%26%' THEN 'ISOTANK' WHEN e.FF_H_EquipoCont LIKE '%57%' THEN 'FLEXITANK' WHEN e.FF_H_EquipoCont LIKE '%2%' THEN 'FLEXITANK' ELSE NULL END AS cont_info")
+                t_select.append('e.FF_H_EquipoCont AS ff_equipo')
+                t_select.append('e.FF_H_EquipoCont AS FF_H_EquipoCont')
+            else:
+                t_select.append("NULL AS cont_info")
+                t_select.append("NULL AS ff_equipo")
             # commercial column: include only for non-Agent exports
             if not (req_type and str(req_type).upper() == 'A'):
                 if 'FF_H_NomCommercial' in entete_set:
@@ -1250,6 +1390,8 @@ def get_ff_list():
                     'eta': row.get('eta'),
                     'house': row.get('house'),
                     'service': row.get('service'),
+                    'cont_info': row.get('cont_info'),
+                    'ff_equipo': row.get('ff_equipo'),
                     'nom_commercial': row.get('nom_commercial'),
                     'ff_total_non_soumis': row.get('ff_total_non_soumis'),
                     'ff_total_soumis': row.get('ff_total_soumis'),
@@ -1404,6 +1546,41 @@ def get_ff_list():
                     f['total_ht_tnd'] = val
             except Exception:
                 continue
+        # Fill cont_info fallback: if cont_info missing, batch-query View_FF_Entete for FF_H_EquipoCont
+        try:
+            refs_missing_cont = [f.get('reference') for f in factures if (f.get('cont_info') is None or f.get('cont_info')=='') and (f.get('reference') or f.get('FF_H_NumFact'))]
+            refs_missing_cont = sorted({str(r) for r in refs_missing_cont if r})
+            if refs_missing_cont:
+                params = {}
+                placeholders = []
+                for i, r in enumerate(refs_missing_cont):
+                    k = f"r{i}"
+                    placeholders.append(f":{k}")
+                    params[k] = r
+                sql = text(f"SELECT FF_H_NumFact AS ref, FF_H_EquipoCont AS equipo FROM dbo.View_FF_Entete WHERE FF_H_NumFact IN ({', '.join(placeholders)})")
+                rows_e = db.session.execute(sql, params).mappings().all()
+                equipo_map = {str(r.get('ref')): (r.get('equipo') or '') for r in rows_e}
+                for f in factures:
+                    try:
+                        if f.get('cont_info') not in (None, ''):
+                            continue
+                        ref = f.get('reference') or f.get('FF_H_NumFact')
+                        if not ref:
+                            continue
+                        eq = str(equipo_map.get(str(ref)) or '').strip()
+                        if not eq:
+                            continue
+                        # priority: '26' -> ISOTANK, then '57' -> FLEXITANK, then '2' -> FLEXITANK
+                        if '26' in eq:
+                            f['cont_info'] = 'ISOTANK'
+                        elif '57' in eq:
+                            f['cont_info'] = 'FLEXITANK'
+                        elif '2' in eq:
+                            f['cont_info'] = 'FLEXITANK'
+                    except Exception:
+                        continue
+        except Exception:
+            pass
         return jsonify({'factures': factures, 'total': len(factures)})
     except Exception as exc:
         return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500
