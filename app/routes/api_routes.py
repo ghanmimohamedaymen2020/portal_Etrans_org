@@ -143,242 +143,77 @@ def get_factures_aa_detail():
     limit = max(0, min(limit, 100000))
     top_clause = f"TOP {limit}" if limit > 0 else ""
 
-    desired_columns = [
-        'AA_H_ID',
-        'AA_H_Reference',
-        'AA_H_DateProcess',
-        'AA_H_Dossier',
-        'AA_H_NomClient',
-        'AA_H_ETA',
-        'AA_H_House',
-        'AA_H_Service',
-        'AA_H_IdCommercial',
-        'AA_H_NomCommercial'
-    ]
-    total_column = 'FF_T_TotalTTC'
-
+    # Use the per-AA aggregation (group by AA header) to compute totals per AA
     try:
-        columns = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_AA_AvecFacture'
-        """)).scalars().all()
-        column_set = {c for c in columns}
-
-        # If View_AA_SansFacture exists, prefer returning its top 1000 rows
-        sans_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_SansFacture'
-        """)).scalars().all()
-        if sans_cols:
-            # select exactly the columns requested by the user
-            select_list = [
-                'AA_H_Reference','AA_H_DateProcess','AA_H_Dossier','AA_H_NomClient',
-                'AA_H_Adresse_1','AA_H_Adresse_2','AA_H_Adresse_3','AA_H_TVA',
-                'AA_H_DateSuspTVA_Du','AA_H_DateSuspTVA_Au','AA_H_IdBar','AA_H_Voyage',
-                'AA_H_Navire','AA_H_PPOL','AA_H_POL','AA_H_DPOL','AA_H_PPOD','AA_H_POD',
-                'AA_H_DPOD','AA_H_ETA','AA_H_Traduccion','AA_H_House','AA_H_MasterBL',
-                'AA_H_Service','AA_H_Escale','AA_H_Rubrique','AA_H_IdCommercial',
-                'AA_H_NomCommercial','AA_H_EmailCommercial','AA_H_IdUtilisateur',
-                'AA_H_EmailUtilisateur','AA_H_Trans_PC_ClientFinal','AA_H_NomClientFinal',
-                'AA_H_NumSuspTVA','AA_H_NumFacture'
-            ]
-            # ensure columns exist in the view
-            available = {c for c in sans_cols}
-            select_parts = [c for c in select_list if c in available]
-            # attempt to include AA totals from View_AA_Total when available
-            aa_total_cols = db.session.execute(text("""
-                SELECT COLUMN_NAME
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'
-            """)).scalars().all()
-            aa_total_set = {c for c in aa_total_cols}
-            aa_join_col = None
-            # prefer referencing by AA_T_Reference if both sides exist
-            if 'AA_T_Reference' in aa_total_set and 'AA_H_Reference' in available:
-                aa_join_col = ('AA_T_Reference', 'AA_H_Reference')
-            elif 'AA_T_NumFact' in aa_total_set and 'AA_H_NumFacture' in available:
-                aa_join_col = ('AA_T_NumFact', 'AA_H_NumFacture')
-            elif 'AA_T_NumFacture' in aa_total_set and 'AA_H_NumFacture' in available:
-                aa_join_col = ('AA_T_NumFacture', 'AA_H_NumFacture')
-
-            # include aa total select parts when present
-            if 'AA_T_TotalNonSoumis' in aa_total_set:
-                select_parts.append('at.AA_T_TotalNonSoumis AS aa_total_non_soumis')
-            if 'AA_T_TotalSoumis' in aa_total_set:
-                select_parts.append('at.AA_T_TotalSoumis AS aa_total_soumis')
-            if 'AA_T_TotalTVA' in aa_total_set:
-                select_parts.append('at.AA_T_TotalTVA AS aa_total_tva')
-
-            if select_parts:
-                join_clause = ''
-                if aa_join_col:
-                    join_clause = f" LEFT JOIN [dbo].[View_AA_Total] at ON at.{aa_join_col[0]} = a.{aa_join_col[1]}"
-                sql = text(f"SELECT TOP 1000 {', '.join(select_parts)} FROM [dbo].[View_AA_SansFacture] a {join_clause} ORDER BY AA_H_DateProcess DESC")
-                rows = db.session.execute(sql).mappings().all()
-                factures = [dict(r) for r in rows]
-                return jsonify({'factures': factures, 'total': len(factures)})
-
-        selected_columns = [c for c in desired_columns if c in column_set]
-        # If the AA view is not available or doesn't contain expected columns,
-        # fall back to returning rows from View_FF_Entete + View_FF_Total so the
-        # frontend lists (not-stamped / invoices) can still show data based on FF.
-        try:
-            # Try unqualified views first
-            total_du_mois = 0.0
-            total_global = 0.0
-            total_year = 0.0
-            count_du_mois = 0
-            count_global = 0
-
-            def try_query_sum(view_sql, col_name='s', count=False):
-                try:
-                    if count:
-                        q = db.session.execute(text(view_sql)).mappings().first()
-                        return float(q.get(col_name) or 0), int(q.get('cnt') or 0)
-                    else:
-                        q = db.session.execute(text(view_sql)).mappings().first()
-                        return float(q.get(col_name) or 0), None
-                except Exception:
-                    return None, None
-
-            # prefer month total from View_FREIGHT_TND_DuMois using MontantTTC
-            s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND_DuMois]", count=True)
-            if s is None:
-                # try fully qualified DB name (some installations use Dashboard.dbo)
-                s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [Dashboard].[dbo].[View_FREIGHT_TND_DuMois]", count=True)
-            if s is not None:
-                total_du_mois = s
-                count_du_mois = c or 0
-
-            # global totals using FF_D_MontantTTC (use TTC for yearly/global sums too)
-            s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [dbo].[View_FREIGHT_TND]", count=True)
-            if s is None:
-                s, c = try_query_sum("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s, COUNT(1) AS cnt FROM [Dashboard].[dbo].[View_FREIGHT_TND]", count=True)
-            if s is not None:
-                total_global = s
-                count_global = c or 0
-                if year:
-                    # try yearly sum from the global view using MontantTTC
-                    try:
-                        r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s FROM [dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year}).mappings().first()
-                        if r3 and r3.get('s') is not None:
-                            total_year = float(r3.get('s') or 0)
-                    except Exception:
-                        try:
-                            r3 = db.session.execute(text("SELECT SUM(ISNULL(FF_D_MontantTTC,0)) AS s FROM [Dashboard].[dbo].[View_FREIGHT_TND] WHERE YEAR(FF_H_DateProcess) = :year"), {'year': year}).mappings().first()
-                            if r3 and r3.get('s') is not None:
-                                total_year = float(r3.get('s') or 0)
-                        except Exception:
-                            total_year = 0.0
-
-            out = {'total_du_mois': total_du_mois, 'total_global': total_global, 'total_year': total_year,
-                   'count_du_mois': count_du_mois, 'count_global': count_global}
-            if request.args.get('debug'):
-                samples = {}
-                if count_du_mois > 0:
-                    rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantTTC FROM [dbo].[View_FREIGHT_TND_DuMois] ORDER BY FF_H_DateProcess DESC")).mappings().all()
-                    samples['du_mois'] = [dict(r) for r in rows_sample]
-                if count_global > 0:
-                    rows_sample = db.session.execute(text("SELECT TOP 20 FF_D_NumFact, FF_H_DateProcess, FF_D_Dossier, FF_D_House, FF_D_MontantHT_TND FROM [dbo].[View_FREIGHT_TND] ORDER BY FF_H_DateProcess DESC")).mappings().all()
-                    samples['global'] = [dict(r) for r in rows_sample]
-                out['samples'] = samples
-            return jsonify(out)
-        except Exception as exc:
-            # If anything fails while computing FF-based fallback totals, ignore
-            # and continue with the AA-based logic below (or return empty rows).
-            pass
-
-        order_by = 'AA_H_DateProcess' if 'AA_H_DateProcess' in column_set else selected_columns[0]
-
-        # Inspect available columns on View_FF_Total to include totals when present
-        total_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_FF_Total'
-        """)).scalars().all()
-        total_set = {c for c in total_cols}
-        total_exists = total_column in total_set
-
-        # Also check for AA totals (View_AA_Total) and include if available
-        aa_total_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo'
-              AND TABLE_NAME = 'View_AA_Total'
-        """)).scalars().all()
-        aa_total_set = {c for c in aa_total_cols}
-
-        select_parts = [f"a.{col}" for col in selected_columns]
-        if total_exists:
-            select_parts.append(f"t.{total_column} AS total_ttc")
-        # Add detailed FF total columns if present
-        if 'FF_T_TotalNonSoumis' in total_set:
-            select_parts.append('t.FF_T_TotalNonSoumis AS ff_total_non_soumis')
-        if 'FF_T_TotalSoumis' in total_set:
-            select_parts.append('t.FF_T_TotalSoumis AS ff_total_soumis')
-        if 'FF_T_TotalTVA' in total_set:
-            select_parts.append('t.FF_T_TotalTVA AS ff_total_tva')
-
-        # Determine join column name in View_AA_Total (could be AA_T_NumFact or AA_T_NumFacture)
-        aa_join_col = None
-        if 'AA_T_NumFact' in aa_total_set:
-            aa_join_col = 'AA_T_NumFact'
-        elif 'AA_T_NumFacture' in aa_total_set:
-            aa_join_col = 'AA_T_NumFacture'
-
-        # include AA totals if present and we have a join key
-        if aa_join_col:
-            if 'AA_T_TotalNonSoumis' in aa_total_set:
-                select_parts.append(f'at.AA_T_TotalNonSoumis AS aa_total_non_soumis')
-            if 'AA_T_TotalSoumis' in aa_total_set:
-                select_parts.append(f'at.AA_T_TotalSoumis AS aa_total_soumis')
-            if 'AA_T_TotalTVA' in aa_total_set:
-                select_parts.append(f'at.AA_T_TotalTVA AS aa_total_tva')
-        # Build optional join to View_AA_Total using the detected join column name
-        join_at_clause = ''
-        if aa_join_col:
-            join_at_clause = f"LEFT JOIN [dbo].[View_AA_Total] at ON at.{aa_join_col} = a.AA_H_NumFacture"
-
         sql = text(f"""
             SELECT {top_clause}
-                {', '.join(select_parts)}
-            FROM [dbo].[View_AA_AvecFacture] a
-            LEFT JOIN [dbo].[View_FF_Total] t
-              ON t.FF_T_NumFact = a.AA_H_NumFacture
-            {join_at_clause}
-            ORDER BY a.{order_by} DESC
+                h.AA_H_Reference,
+                h.AA_H_DateProcess,
+                h.AA_H_Dossier,
+                h.AA_H_NomClient,
+                h.AA_H_Adresse_1,
+                h.AA_H_Adresse_2,
+                h.AA_H_Adresse_3,
+                h.AA_H_TVA,
+                h.AA_H_DateSuspTVA_Du,
+                h.AA_H_DateSuspTVA_Au,
+                h.AA_H_IdBar,
+                h.AA_H_Voyage,
+                h.AA_H_Navire,
+                h.AA_H_PPOL,
+                h.AA_H_POL,
+                h.AA_H_DPOL,
+                h.AA_H_PPOD,
+                h.AA_H_POD,
+                h.AA_H_DPOD,
+                h.AA_H_ETA,
+                h.AA_H_Traduccion,
+                h.AA_H_House,
+                h.AA_H_MasterBL,
+                h.AA_H_Service,
+                h.AA_H_Escale,
+                h.AA_H_Rubrique,
+                h.AA_H_IdCommercial,
+                h.AA_H_NomCommercial,
+                h.AA_H_EmailCommercial,
+                h.AA_H_IdUtilisateur,
+                h.AA_H_EmailUtilisateur,
+                h.AA_H_Trans_PC_ClientFinal,
+                h.AA_H_NomClientFinal,
+                h.AA_H_NumSuspTVA,
+                h.AA_H_NumFacture,
+                SUM(ISNULL(t.AA_T_TotalNonSoumis,0)) AS aa_total_non_soumis,
+                SUM(ISNULL(t.AA_T_TotalSoumis,0)) AS aa_total_soumis,
+                SUM(ISNULL(t.AA_T_TotalNonSoumis,0) + ISNULL(t.AA_T_TotalSoumis,0)) AS aa_total_general,
+                SUM(ISNULL(t.AA_T_TotalTVA,0)) AS aa_total_tva
+            FROM [Dashboard].[dbo].[View_AA_SansFacture] h
+            LEFT JOIN [Dashboard].[dbo].[View_AA_Total] t
+                ON t.AA_T_Reference = h.AA_H_Reference
+            GROUP BY h.AA_H_Reference, h.AA_H_DateProcess, h.AA_H_Dossier, h.AA_H_NomClient,
+                     h.AA_H_Adresse_1, h.AA_H_Adresse_2, h.AA_H_Adresse_3, h.AA_H_TVA,
+                     h.AA_H_DateSuspTVA_Du, h.AA_H_DateSuspTVA_Au, h.AA_H_IdBar, h.AA_H_Voyage,
+                     h.AA_H_Navire, h.AA_H_PPOL, h.AA_H_POL, h.AA_H_DPOL, h.AA_H_PPOD,
+                     h.AA_H_POD, h.AA_H_DPOD, h.AA_H_ETA, h.AA_H_Traduccion, h.AA_H_House,
+                     h.AA_H_MasterBL, h.AA_H_Service, h.AA_H_Escale, h.AA_H_Rubrique,
+                     h.AA_H_IdCommercial, h.AA_H_NomCommercial, h.AA_H_EmailCommercial,
+                     h.AA_H_IdUtilisateur, h.AA_H_EmailUtilisateur, h.AA_H_Trans_PC_ClientFinal,
+                     h.AA_H_NomClientFinal, h.AA_H_NumSuspTVA, h.AA_H_NumFacture
+            ORDER BY h.AA_H_DateProcess DESC
         """)
 
         rows = db.session.execute(sql).mappings().all()
-        factures = [
-            {
-                'reference': row.get('AA_H_Reference'),
-                'date_process': row.get('AA_H_DateProcess'),
-                'dossier': row.get('AA_H_Dossier'),
-                'nom_client': row.get('AA_H_NomClient'),
-                'eta': row.get('AA_H_ETA'),
-                'house': row.get('AA_H_House'),
-                'service': row.get('AA_H_Service'),
-                'id_commercial': row.get('AA_H_IdCommercial'),
-                'nom_commercial': row.get('AA_H_NomCommercial'),
-                
-                'total_ttc': row.get('total_ttc'),
-                'ff_total_non_soumis': row.get('ff_total_non_soumis'),
-                'ff_total_soumis': row.get('ff_total_soumis'),
-                'ff_total_tva': row.get('ff_total_tva'),
-                'aa_total_non_soumis': row.get('aa_total_non_soumis'),
-                'aa_total_soumis': row.get('aa_total_soumis'),
-                'aa_total_tva': row.get('aa_total_tva')
-            }
-            for row in rows
-        ]
+        factures = [dict(r) for r in rows]
 
-        return jsonify({'factures': factures, 'total': len(factures)})
+        # total count from the canonical view
+        try:
+            cnt_row = db.session.execute(text("SELECT COUNT(1) AS cnt FROM [Dashboard].[dbo].[View_AA_SansFacture]")).mappings().first()
+            total_count = int(cnt_row.get('cnt') or len(factures))
+        except Exception:
+            total_count = len(factures)
+
+        return jsonify({'factures': factures, 'total': total_count})
     except Exception as exc:
+        # fallback to previous behavior: return empty with error
         return jsonify({'factures': [], 'total': 0, 'error': str(exc)}), 500
 
 
@@ -390,87 +225,135 @@ def get_aa_totals():
     View_AA_SansFacture to View_AA_Total. Returns totals and computed HT.
     """
     try:
-        # detect columns in View_AA_Total
-        aa_total_cols = db.session.execute(text("""
-            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'
-        """)).scalars().all()
-        aa_total_set = {c for c in aa_total_cols}
+        # Preferred calculation: aggregate per AA (avoid duplicates when View_AA_Total has multiple rows per AA)
+        sql = text("""
+            WITH per_aa AS (
+                SELECT h.AA_H_Reference,
+                       SUM(ISNULL(t.AA_T_TotalNonSoumis,0)) AS total_non_soumis,
+                       SUM(ISNULL(t.AA_T_TotalSoumis,0)) AS total_soumis,
+                       SUM(ISNULL(t.AA_T_TotalNonSoumis,0) + ISNULL(t.AA_T_TotalSoumis,0)) AS total_general,
+                       SUM(ISNULL(t.AA_T_TotalTVA,0)) AS total_tva
+                FROM [Dashboard].[dbo].[View_AA_SansFacture] h
+                LEFT JOIN [Dashboard].[dbo].[View_AA_Total] t
+                  ON t.AA_T_Reference = h.AA_H_Reference
+                GROUP BY h.AA_H_Reference
+            )
+            SELECT COUNT(1) AS count,
+                   SUM(total_non_soumis) AS total_non_soumis,
+                   SUM(total_soumis) AS total_soumis,
+                   SUM(total_general) AS total_general,
+                   SUM(total_tva) AS total_tva
+            FROM per_aa
+        """)
 
-        # detect existence of View_AA_SansFacture (for count and join)
-        sans_exists = db.session.execute(text("""
-            SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_SansFacture'
-        """)).fetchone() is not None
+        r = db.session.execute(sql).mappings().first()
+        if r:
+            count = int(r.get('count') or 0)
+            total_non_soumis = float(r.get('total_non_soumis') or 0)
+            total_soumis = float(r.get('total_soumis') or 0)
+            total_general = float(r.get('total_general') or (total_non_soumis + total_soumis))
+            total_tva = float(r.get('total_tva') or 0)
+        else:
+            count = 0
+            total_non_soumis = total_soumis = total_general = total_tva = 0.0
 
-        # count of not-stamped notices (prefer View_AA_SansFacture)
-        count = 0
-        if sans_exists:
-            try:
-                cnt_row = db.session.execute(text("SELECT COUNT(1) AS cnt FROM dbo.View_AA_SansFacture")).mappings().first()
-                count = int(cnt_row.get('cnt') or 0)
-            except Exception:
-                count = 0
+        total_ht = total_general - total_tva
+        return jsonify({
+            'count': count,
+            'total_non_soumis': total_non_soumis,
+            'total_soumis': total_soumis,
+            'total_tva': total_tva,
+            'total_general': total_general,
+            'total_ht': total_ht
+        })
+    except Exception:
+        # If the preferred per-AA calculation fails, fall back to previous logic
+        try:
+            # detect columns in View_AA_Total
+            aa_total_cols = db.session.execute(text("""
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'
+            """)).scalars().all()
+            aa_total_set = {c for c in aa_total_cols}
 
-        total_soumis = 0.0
-        total_non_soumis = 0.0
-        total_tva = 0.0
+            # detect existence of View_AA_SansFacture (for count and join)
+            sans_exists = db.session.execute(text("""
+                SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_SansFacture'
+            """)).fetchone() is not None
 
-        # Preferred: sum directly from View_AA_Total if totals columns exist
-        if 'AA_T_TotalSoumis' in aa_total_set or 'AA_T_TotalNonSoumis' in aa_total_set:
-            try:
-                tva_expr = 'SUM(ISNULL(AA_T_TotalTVA,0)) AS total_tva' if 'AA_T_TotalTVA' in aa_total_set else '0 AS total_tva'
-                sql = text(f"SELECT SUM(ISNULL(AA_T_TotalSoumis,0)) AS total_soumis, SUM(ISNULL(AA_T_TotalNonSoumis,0)) AS total_non_soumis, {tva_expr} FROM dbo.View_AA_Total")
-                row = db.session.execute(sql).mappings().first() or {}
-                total_soumis = float(row.get('total_soumis') or 0)
-                total_non_soumis = float(row.get('total_non_soumis') or 0)
-                total_tva = float(row.get('total_tva') or 0)
-                total_ht = (total_soumis + total_non_soumis) - total_tva
-                return jsonify({
-                    'count': count,
-                    'total_soumis': total_soumis,
-                    'total_non_soumis': total_non_soumis,
-                    'total_tva': total_tva,
-                    'total_ht': total_ht
-                })
-            except Exception:
-                # fallback to join-based approach below
-                pass
+            # count of not-stamped notices (prefer View_AA_SansFacture)
+            count = 0
+            if sans_exists:
+                try:
+                    cnt_row = db.session.execute(text("SELECT COUNT(1) AS cnt FROM dbo.View_AA_SansFacture")).mappings().first()
+                    count = int(cnt_row.get('cnt') or 0)
+                except Exception:
+                    count = 0
 
-        # If direct totals not available, try joining SansFacture -> AA_Total
-        if sans_exists:
-            try:
-                aa_total_cols = db.session.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'")).scalars().all()
-                aa_total_set = {c for c in aa_total_cols}
-                aa_join_col = None
-                if 'AA_T_Reference' in aa_total_set:
-                    aa_join_col = 'AA_T_Reference'
-                elif 'AA_T_NumFact' in aa_total_set:
-                    aa_join_col = 'AA_T_NumFact'
-                elif 'AA_T_NumFacture' in aa_total_set:
-                    aa_join_col = 'AA_T_NumFacture'
+            total_soumis = 0.0
+            total_non_soumis = 0.0
+            total_tva = 0.0
 
-                if aa_join_col:
-                    tva_expr = 'SUM(ISNULL(at.AA_T_TotalTVA,0)) AS total_tva' if 'AA_T_TotalTVA' in aa_total_set else '0 AS total_tva'
-                    sql = text(f"SELECT SUM(ISNULL(at.AA_T_TotalSoumis,0)) AS total_soumis, SUM(ISNULL(at.AA_T_TotalNonSoumis,0)) AS total_non_soumis, {tva_expr} FROM dbo.View_AA_SansFacture a LEFT JOIN dbo.View_AA_Total at ON at.{aa_join_col} = a.AA_H_Reference")
+            # Preferred: sum directly from View_AA_Total if totals columns exist
+            if 'AA_T_TotalSoumis' in aa_total_set or 'AA_T_TotalNonSoumis' in aa_total_set:
+                try:
+                    tva_expr = 'SUM(ISNULL(AA_T_TotalTVA,0)) AS total_tva' if 'AA_T_TotalTVA' in aa_total_set else '0 AS total_tva'
+                    sql = text(f"SELECT SUM(ISNULL(AA_T_TotalSoumis,0)) AS total_soumis, SUM(ISNULL(AA_T_TotalNonSoumis,0)) AS total_non_soumis, {tva_expr} FROM dbo.View_AA_Total")
                     row = db.session.execute(sql).mappings().first() or {}
                     total_soumis = float(row.get('total_soumis') or 0)
                     total_non_soumis = float(row.get('total_non_soumis') or 0)
                     total_tva = float(row.get('total_tva') or 0)
+                    total_general = total_non_soumis + total_soumis
                     total_ht = (total_soumis + total_non_soumis) - total_tva
                     return jsonify({
                         'count': count,
                         'total_soumis': total_soumis,
                         'total_non_soumis': total_non_soumis,
                         'total_tva': total_tva,
+                        'total_general': total_general,
                         'total_ht': total_ht
                     })
-            except Exception:
-                pass
+                except Exception:
+                    # fallback to join-based approach below
+                    pass
 
-        # Final fallback: return count and zeros
-        return jsonify({'count': count, 'total_soumis': 0.0, 'total_non_soumis': 0.0, 'total_tva': 0.0, 'total_ht': 0.0})
-    except Exception as exc:
-        return jsonify({'count': 0, 'total_soumis': 0.0, 'total_non_soumis': 0.0, 'total_tva': 0.0, 'total_ht': 0.0, 'error': str(exc)}), 500
+            # If direct totals not available, try joining SansFacture -> AA_Total
+            if sans_exists:
+                try:
+                    aa_total_cols = db.session.execute(text("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_Total'")).scalars().all()
+                    aa_total_set = {c for c in aa_total_cols}
+                    aa_join_col = None
+                    if 'AA_T_Reference' in aa_total_set:
+                        aa_join_col = 'AA_T_Reference'
+                    elif 'AA_T_NumFact' in aa_total_set:
+                        aa_join_col = 'AA_T_NumFact'
+                    elif 'AA_T_NumFacture' in aa_total_set:
+                        aa_join_col = 'AA_T_NumFacture'
+
+                    if aa_join_col:
+                        tva_expr = 'SUM(ISNULL(at.AA_T_TotalTVA,0)) AS total_tva' if 'AA_T_TotalTVA' in aa_total_set else '0 AS total_tva'
+                        sql = text(f"SELECT SUM(ISNULL(at.AA_T_TotalSoumis,0)) AS total_soumis, SUM(ISNULL(at.AA_T_TotalNonSoumis,0)) AS total_non_soumis, {tva_expr} FROM dbo.View_AA_SansFacture a LEFT JOIN dbo.View_AA_Total at ON at.{aa_join_col} = a.AA_H_Reference")
+                        row = db.session.execute(sql).mappings().first() or {}
+                        total_soumis = float(row.get('total_soumis') or 0)
+                        total_non_soumis = float(row.get('total_non_soumis') or 0)
+                        total_tva = float(row.get('total_tva') or 0)
+                        total_general = total_non_soumis + total_soumis
+                        total_ht = (total_soumis + total_non_soumis) - total_tva
+                        return jsonify({
+                            'count': count,
+                            'total_soumis': total_soumis,
+                            'total_non_soumis': total_non_soumis,
+                            'total_tva': total_tva,
+                            'total_general': total_general,
+                            'total_ht': total_ht
+                        })
+                except Exception:
+                    pass
+
+            # Final fallback: return count and zeros
+            return jsonify({'count': count, 'total_soumis': 0.0, 'total_non_soumis': 0.0, 'total_tva': 0.0, 'total_general': 0.0, 'total_ht': 0.0})
+        except Exception as exc:
+            return jsonify({'count': 0, 'total_soumis': 0.0, 'total_non_soumis': 0.0, 'total_tva': 0.0, 'total_general': 0.0, 'total_ht': 0.0, 'error': str(exc)}), 500
 
 
 @api_bp.route('/factures/details-aa', methods=['GET'])
@@ -924,38 +807,67 @@ def debug_agent_sample():
 @api_bp.route('/factures/agent-tnd-monthly', methods=['GET'])
 @login_required
 def get_agent_tnd_monthly():
-    """Retourne la somme mensuelle des factures Agent en TND pour une année donnée.
-    Params: year (opt). Retourne un tableau de 12 valeurs (mois 1..12) en TND.
-    Utilise la vue `View_FREIGHT_TND` si disponible.
-    """
-    year = request.args.get('year', type=int)
-    if not year:
-        from datetime import datetime
-        year = datetime.utcnow().year
-
+    # Compute totals by summing per-AA TotalGeneral (preferred) then fallback
     try:
-        # check if View_FREIGHT_TND exists
-        view_exists = db.session.execute(text("""
-            SELECT 1 FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FREIGHT_TND'
-        """)).fetchone() is not None
-
-        if not view_exists:
-            return jsonify({'error': 'View_FREIGHT_TND not available on DB; cannot compute TND totals.'}), 404
-
         sql = text("""
-            SELECT MONTH(FF_H_DateProcess) AS month,
-                   SUM(ISNULL(FF_D_MontantTTC,0)) AS total_ttc_tnd
-            FROM [dbo].[View_FREIGHT_TND]
-            WHERE UPPER(LTRIM(RTRIM(FF_H_TypeFacture))) = 'A'
-              AND YEAR(FF_H_DateProcess) = :year
-            GROUP BY MONTH(FF_H_DateProcess)
-            ORDER BY MONTH(FF_H_DateProcess)
+            WITH per_aa AS (
+                SELECT h.AA_H_Reference,
+                       SUM(ISNULL(t.AA_T_TotalNonSoumis,0)) AS total_non_soumis,
+                       SUM(ISNULL(t.AA_T_TotalSoumis,0)) AS total_soumis,
+                       SUM(ISNULL(t.AA_T_TotalNonSoumis,0) + ISNULL(t.AA_T_TotalSoumis,0)) AS total_general,
+                       SUM(ISNULL(t.AA_T_TotalTVA,0)) AS total_tva
+                FROM [Dashboard].[dbo].[View_AA_SansFacture] h
+                LEFT JOIN [Dashboard].[dbo].[View_AA_Total] t
+                  ON t.AA_T_Reference = h.AA_H_Reference
+                GROUP BY h.AA_H_Reference
+            )
+            SELECT COUNT(1) AS count,
+                   SUM(total_non_soumis) AS total_non_soumis,
+                   SUM(total_soumis) AS total_soumis,
+                   SUM(total_general) AS total_general,
+                   SUM(total_tva) AS total_tva
+            FROM per_aa
         """)
 
-        rows = db.session.execute(sql, {'year': year}).mappings().all()
-        by_month = {int(r['month']): float(r['total_ttc_tnd'] or 0) for r in rows}
-        series = [by_month.get(m, 0.0) for m in range(1, 13)]
+        r = db.session.execute(sql).mappings().first()
+        if r:
+            total_non_soumis = float(r.get('total_non_soumis') or 0)
+            total_soumis = float(r.get('total_soumis') or 0)
+            total_general = float(r.get('total_general') or (total_non_soumis + total_soumis))
+            total_tva = float(r.get('total_tva') or 0)
+            count = int(r.get('count') or 0)
+        else:
+            count = 0
+            total_non_soumis = total_soumis = total_general = total_tva = 0.0
 
+        total_ht = total_general - total_tva
+        return jsonify({'count': count, 'total_non_soumis': total_non_soumis,
+                        'total_soumis': total_soumis, 'total_tva': total_tva,
+                        'total_general': total_general, 'total_ht': total_ht})
+    except Exception:
+        # Fallback: aggregate directly from View_AA_Total if per-AA aggregation fails
+        try:
+            r2 = db.session.execute(text("""
+                SELECT
+                    SUM(ISNULL(AA_T_TotalNonSoumis,0)) AS total_non_soumis,
+                    SUM(ISNULL(AA_T_TotalSoumis,0)) AS total_soumis,
+                    SUM(ISNULL(AA_T_TotalTVA,0)) AS total_tva
+                FROM [Dashboard].[dbo].[View_AA_Total]
+            """)).mappings().first()
+            total_non_soumis = float(r2.get('total_non_soumis') or 0)
+            total_soumis = float(r2.get('total_soumis') or 0)
+            total_tva = float(r2.get('total_tva') or 0)
+            total_general = total_non_soumis + total_soumis
+            total_ht = total_general - total_tva
+            cnt = db.session.execute(text("SELECT COUNT(1) AS cnt FROM [Dashboard].[dbo].[View_AA_SansFacture]")).mappings().first()
+            count = int(cnt.get('cnt') or 0) if cnt else 0
+            return jsonify({'count': count, 'total_non_soumis': total_non_soumis,
+                            'total_soumis': total_soumis, 'total_tva': total_tva,
+                            'total_general': total_general, 'total_ht': total_ht})
+        except Exception as exc:
+            return jsonify({'count': 0, 'total_non_soumis': 0.0,
+                            'total_soumis': 0.0, 'total_tva': 0.0,
+                            'total_general': 0.0, 'total_ht': 0.0, 'error': str(exc)}), 500
         return jsonify({'year': year, 'monthly_tnd': series})
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
