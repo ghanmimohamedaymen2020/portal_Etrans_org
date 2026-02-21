@@ -159,7 +159,7 @@ body.list-only .list-section {
   border-radius: 0;
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto; /* allow table scrolling when in list-only mode */
 }
 
 body.list-only .list-section table {
@@ -167,7 +167,7 @@ body.list-only .list-section table {
   min-height: 0;
   height: 100%;
   margin-bottom: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 body.list-only main {
@@ -379,6 +379,21 @@ width: 100%;
   max-height: 400px;   /* hauteur du scroll */
   overflow-y: auto;
   overflow-x: auto;
+
+/* Sticky first column (Avis référence) when horizontally scrolling */
+.list-table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  background: #f8f9fa;
+}
+.list-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: #ffffff;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.04);
+}
 }
 
 /* ===== CORRECTION UNIQUEMENT DE LA HAUTEUR DES EN-TÊTES ===== */
@@ -453,7 +468,8 @@ width: 100%;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   display: block;
   height: 95%;
   max-height: 100%;
@@ -749,6 +765,40 @@ body.chart-only.show-chart-list .list-section {
 @media (max-width: 480px) {
   .kpi-section { grid-template-columns: 1fr; gap:6px; }
 }
+  /* Sticky first column and horizontal scroll adjustments for lists */
+  .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  body.list-only .list-section { overflow-x: auto; }
+
+  /* Sticky table header: keep header visible when vertically scrolling */
+  #list-table thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+  }
+
+  /* Make the first column (Numéro Avis) sticky when horizontally scrolling */
+  #list-table th:first-child,
+  #list-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+    background: #fff;
+  }
+
+  /* Ensure the top-left corner (header + first column) sits above both header and column */
+  #list-table thead th:first-child {
+    z-index: 12;
+  }
+
+  /* Small visual separation shadow when stuck */
+  #list-table td:first-child { box-shadow: 2px 0 5px -2px rgba(0,0,0,0.15); }
+
+  /* Slight shadow under header to separate from rows */
+  #list-table thead th { box-shadow: 0 2px 5px -2px rgba(0,0,0,0.08); }
+
+  /* Ensure cell content truncation behaves nicely */
+  #list-table td .cell-content { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 {% endblock %}
 
@@ -817,9 +867,10 @@ body.chart-only.show-chart-list .list-section {
       <div style="display:flex;align-items:center;gap:10px;">
         <label for="ca-mode-select" class="text-muted" style="font-size:0.9rem;margin-right:6px;">Vue :</label>
         <select id="ca-mode-select" class="list-page-size">
-          <option value="total" selected>Total</option>
           <option value="timbrage">Timbrage</option>
-          <option value="magasinage">Magasinage</option>
+            <option value="total" >Total</option>
+
+          <option value="magasinage" selected>Magasinage</option>
           <option value="agent">Agent</option>
           <option value="surestarie">Surestarie</option>
           <option value="detail">Détail (empilé)</option>
@@ -1023,8 +1074,7 @@ document.addEventListener('DOMContentLoaded',function(){
   
   // Masquer le chargement après 2 secondes maximum (au cas où)
   setTimeout(hideLoading, 2000);
-  
-  const listSection=document.getElementById('list-section');
+/* Lines 2951-2953 omitted */
   const listTitle=document.getElementById('list-title');
   const listCount=document.getElementById('list-count');
   const listTableBody=document.querySelector('#list-table tbody');
@@ -1147,14 +1197,24 @@ document.addEventListener('DOMContentLoaded',function(){
     ],
     aaSansFacture:[
       {key:'AA_H_Reference',label:'Numéro Avis'},
+      {key:'AA_H_DateProcess',label:'Date Process'},
       {key:'AA_H_Dossier',label:'Dossier'},
       {key:'AA_H_NomClient',label:'Client'},
-      {key:'aa_total_non_soumis',label:'Total Non Soumis'},
-      {key:'aa_total_soumis',label:'Total Soumis'},
-      {key:'aa_total_tva',label:'Total TVA'},
+      {key:'AA_H_Adresse_1',label:'Adresse 1'},
+      {key:'AA_H_Adresse_2',label:'Adresse 2'},
+      {key:'AA_H_Adresse_3',label:'Adresse 3'},
       {key:'AA_H_TVA',label:'TVA'},
+      {key:'AA_H_DateSuspTVA_Du',label:'Susp TVA Du'},
+      {key:'AA_H_DateSuspTVA_Au',label:'Susp TVA Au'},
+      {key:'AA_H_IdBar',label:'ID Bar'},
       {key:'AA_H_Voyage',label:'Voyage'},
       {key:'AA_H_Navire',label:'Navire'},
+      {key:'AA_H_PPOL',label:'PPOL'},
+      {key:'AA_H_POL',label:'POL'},
+      {key:'AA_H_DPOL',label:'DPOL'},
+      {key:'AA_H_PPOD',label:'PPOD'},
+      {key:'AA_H_POD',label:'POD'},
+      {key:'AA_H_DPOD',label:'DPOD'},
       {key:'AA_H_ETA',label:'ETA'},
       {key:'AA_H_Traduccion',label:'Traduction'},
       {key:'AA_H_House',label:'House'},
@@ -1162,9 +1222,21 @@ document.addEventListener('DOMContentLoaded',function(){
       {key:'AA_H_Service',label:'Service'},
       {key:'AA_H_Escale',label:'Escale'},
       {key:'AA_H_Rubrique',label:'Rubrique'},
-      {key:'AA_H_NomCommercial',label:'Nom Commercial'},
+      {key:'AA_H_IdCommercial',label:'ID Commercial'},
+      {key:'nom_commercial',label:'Nom Commercial'},
+     // {key:'AA_H_NomCommercial',label:'Nom Commercial (raw)'},
+      {key:'AA_H_EmailCommercial',label:'Email Commercial'},
+      {key:'AA_H_IdUtilisateur',label:'ID Utilisateur'},
+      {key:'AA_H_EmailUtilisateur',label:'Email Utilisateur'},
       //{key:'AA_H_Trans_PC_ClientFinal',label:'Client Final'},
-      {key:'AA_H_NomClientFinal',label:'Nom Client Final'}
+      {key:'AA_H_NomClientFinal',label:'Nom Client Final'},
+      {key:'AA_H_NumSuspTVA',label:'Num Susp TVA'},
+      {key:'AA_H_NumFacture',label:'Num Facture'},
+      {key:'aa_total_non_soumis',label:'Total Non Soumis'},
+      {key:'aa_total_soumis',label:'Total Soumis'},
+      {key:'aa_total_tva',label:'Total TVA'},
+      {key:'aa_total_general',label:'Total Général'},
+      {key:'aa_total_ttc',label:'Total TTC'}
     ],
     default:[
       {key:'reference',label:'Numéro facture'},
@@ -1312,6 +1384,16 @@ document.addEventListener('DOMContentLoaded',function(){
       minimumFractionDigits:3,
       maximumFractionDigits:3
     });
+  }
+
+  // Truncate long text for table cells (preserve full value in title)
+  function truncateString(s, maxLen){
+    try{
+      if(s===null||s===undefined) return '';
+      const str = String(s);
+      if(str.length <= (maxLen||50)) return str;
+      return str.slice(0, (maxLen||50) - 3) + '...';
+    }catch(e){ return s; }
   }
 
   function renderDeviseCommercialSummary(items,deviseFilter=null,monthIndex=null,year=null){
@@ -1469,7 +1551,7 @@ document.addEventListener('DOMContentLoaded',function(){
           if(exportCsvBtn){
             exportCsvBtn.style.display='inline-block';
             exportCsvBtn.onclick = function(){
-              window.location = '/api/factures/aa-detail/export';
+              window.location = '/api/factures/aa-detail/export.xlsx';
             };
           }
           setKpiValue('not-stamped',items.length);
@@ -1586,8 +1668,11 @@ document.addEventListener('DOMContentLoaded',function(){
         if (aaResp.ok) {
           const aaJson = await aaResp.json();
           const cnt = aaJson.count || 0;
-          // Display sum of soumis + non_soumis (TND)
-          const total_sum = Number(aaJson.total_soumis || 0) + Number(aaJson.total_non_soumis || 0);
+          // Prefer explicit `total_general` from the API when available,
+          // otherwise fall back to summing submitted + non-submitted totals.
+          const total_sum = (aaJson.total_general != null)
+            ? Number(aaJson.total_general || 0)
+            : (Number(aaJson.total_soumis || 0) + Number(aaJson.total_non_soumis || 0));
           setKpiValue('not-stamped', formatAmount(total_sum) + ' TND');
           const badge = document.querySelector('[data-kpi-count="not-stamped-count"]');
           if (badge) badge.textContent = cnt;
@@ -1795,6 +1880,10 @@ document.addEventListener('DOMContentLoaded',function(){
       const tr=document.createElement('tr');
       tr.innerHTML=columns.map(col=>{
         let value=item[col.key]??'';
+        // Fallback: ensure `nom_commercial` is shown even if the API returned a differently-named key
+        if((col.key === 'nom_commercial' || (col.key||'').toString().toLowerCase() === 'nom_commercial') && (!value || value === '')){
+          value = item['nom_commercial'] || item['AA_H_NomCommercial'] || item['AA_H_NOMCOMMERCIAL'] || item['aa_h_nomcommercial'] || '';
+        }
         // format dates
         if(col.key && (col.key.toLowerCase().includes('date') || col.key.toLowerCase().includes('eta'))){
           value=formatDateValue(value);
@@ -1818,12 +1907,21 @@ document.addEventListener('DOMContentLoaded',function(){
               // mark AA header references so click handler can call AA detail endpoint directly
               const isAA = /AA_H_/i.test(col.key) || /AA_H_Reference/i.test(col.key);
               const aaAttr = isAA ? ' data-aa="1"' : '';
-              cellHtml = `<a href="#" class="invoice-link" data-invoice="${inv}"${aaAttr}>${inv}</a>`;
+              const invLabel = truncateString(inv, 50);
+              cellHtml = `<a href="#" class="invoice-link" data-invoice="${escapeHtml(inv)}"${aaAttr}>${escapeHtml(invLabel)}</a>`;
             }
           }
         }catch(e){ /* ignore formatting errors */ }
         const plainText = (value===null || value===undefined || typeof value==='object') ? '' : String(value);
-        return `<td data-col="${col.key}" class="${hiddenClass}" title="${escapeHtml(plainText)}"><div class="cell-content">${cellHtml}</div></td>`;
+        const displayText = truncateString(plainText, 50);
+        // if the cellHtml is simple text (not an element), show truncated displayText
+        let finalHtml = cellHtml;
+        try{
+          if(!/<[a-z][\s\S]*>/i.test(cellHtml)){
+            finalHtml = escapeHtml(displayText);
+          }
+        }catch(e){ finalHtml = escapeHtml(displayText); }
+        return `<td data-col="${col.key}" class="${hiddenClass}" title="${escapeHtml(plainText)}"><div class="cell-content">${finalHtml}</div></td>`;
       }).join('');
       if(currentListKey==='generated'&&listMode==='summary'){
         tr.classList.add('clickable-row');
@@ -2075,8 +2173,8 @@ document.addEventListener('DOMContentLoaded',function(){
   const barData=new Array(12).fill(0);
   // datasets: total + activities
   const datasets = {
-    total: { label: 'Total (TND)', data: [...barData], backgroundColor: 'rgba(52,152,219,0.6)', borderColor: '#3498db' },
     timbrage: { label: 'Timbrage', data: [...barData], backgroundColor: '#3498db' },
+    total: { label: 'Total (TND)', data: [...barData], backgroundColor: 'rgba(52,152,219,0.6)', borderColor: '#3498db' },
     magasinage: { label: 'Magasinage', data: [...barData], backgroundColor: '#2ecc71' },
     agent: { label: 'Agent', data: [...barData], backgroundColor: '#f39c12' },
     surestarie: { label: 'Surestarie', data: [...barData], backgroundColor: '#e74c3c' }
@@ -2356,6 +2454,18 @@ document.addEventListener('DOMContentLoaded',function(){
         const dp = dpRaw ? formatDateValue(dpRaw) : '';
         const dossier = getVal(first, ['dossier','AA_H_Dossier','AA_D_Dossier','AA_D_DossierRef','AA_H_DossierRef']);
         const client = getVal(first, ['nom_client','AA_H_NomClient','AA_D_NomClient','AA_H_NomClientFinal']);
+        const commercial = getVal(first, ['nom_commercial','AA_H_NomCommercial','AA_D_NomCommercial','AA_H_NomCommercial']);
+        // If header commercial is empty, try to find it in the detail rows as a fallback
+        let commercialFallback = commercial;
+        if(!commercialFallback || String(commercialFallback).trim()===''){
+          for(const r of rows){
+            const c = getVal(r, ['nom_commercial','AA_H_NomCommercial','AA_D_NomCommercial','AA_D_NomCommercial','AA_H_NomCommercial']);
+            if(c && String(c).trim()!==''){
+              commercialFallback = c;
+              break;
+            }
+          }
+        }
         const eta = getVal(first, ['eta','AA_H_ETA','AA_D_ETA']);
         const house = getVal(first, ['house','AA_H_House','AA_D_House']);
         const service = getVal(first, ['service','AA_H_Service','AA_D_Service']);
@@ -2363,6 +2473,7 @@ document.addEventListener('DOMContentLoaded',function(){
           infoEl.innerHTML = `
             <strong>Dossier:</strong> ${dossier} &nbsp; • &nbsp;
             <strong>Client:</strong> ${client} &nbsp; • &nbsp;
+            <strong>Commercial:</strong> ${commercialFallback} &nbsp; • &nbsp;
             <strong>Date:</strong> ${dp} &nbsp; • &nbsp;
             <strong>ETA:</strong> ${eta} &nbsp; • &nbsp;
             <strong>House:</strong> ${house} &nbsp; • &nbsp;
