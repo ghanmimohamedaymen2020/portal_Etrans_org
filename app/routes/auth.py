@@ -222,6 +222,54 @@ def create_user():
     flash(f'Utilisateur {username} créé avec succès!', 'success')
     return redirect(url_for('auth.manage_users'))
 
+
+@auth_bp.route('/admin/users/<int:user_id>/edit', methods=['POST'])
+@login_required
+def edit_user(user_id):
+    """Modifier un utilisateur (Admin seulement)"""
+    if current_user.role.name != 'Admin':
+        flash('Accès non autorisé.', 'error')
+        return redirect(url_for('dashboard.index'))
+
+    user = User.query.get_or_404(user_id)
+
+    username = request.form.get('username')
+    email = request.form.get('email')
+    role_id = request.form.get('role_id')
+    password = request.form.get('password')
+
+    if not all([username, email, role_id]):
+        flash('Nom, email et rôle sont obligatoires.', 'error')
+        return redirect(url_for('auth.manage_users'))
+
+    # Check uniqueness excluding current user
+    existing = User.query.filter(User.username == username, User.id != user.id).first()
+    if existing:
+        flash('Ce nom d\'utilisateur est déjà utilisé par un autre compte.', 'error')
+        return redirect(url_for('auth.manage_users'))
+
+    existing_email = User.query.filter(User.email == email, User.id != user.id).first()
+    if existing_email:
+        flash('Cet email est déjà utilisé par un autre compte.', 'error')
+        return redirect(url_for('auth.manage_users'))
+
+    # Apply changes
+    user.username = username
+    user.email = email
+    user.role_id = int(role_id)
+
+    # Update password only if provided
+    if password:
+        errors = validate_password_rules(password)
+        if errors:
+            flash(' '.join(errors), 'error')
+            return redirect(url_for('auth.manage_users'))
+        user.set_password(password)
+
+    db.session.commit()
+    flash(f'Utilisateur {user.username} mis à jour.', 'success')
+    return redirect(url_for('auth.manage_users'))
+
 @auth_bp.route('/admin/users/<int:user_id>/delete', methods=['POST'])
 @login_required
 def delete_user(user_id):

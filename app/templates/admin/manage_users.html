@@ -86,6 +86,10 @@
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
+                                    <button type="button" class="btn btn-sm btn-primary" title="Éditer" data-bs-toggle="modal" data-bs-target="#editUserModal"
+                                            data-user-id="{{ user.id }}" data-username="{{ user.username }}" data-email="{{ user.email }}" data-role-id="{{ user.role.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
                                     {% else %}
                                     <span class="text-muted">-</span>
                                     {% endif %}
@@ -145,5 +149,73 @@
         </div>
     </div>
 </div>
+
+<!-- Modal pour éditer un utilisateur -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">
+                    <i class="fas fa-user-edit"></i> Éditer utilisateur
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" id="editUserForm" action="">
+                <div class="modal-body">
+                    <input type="hidden" id="edit_user_id" name="user_id">
+                    <div class="mb-3">
+                        <label for="edit_username" class="form-label">Nom d'utilisateur *</label>
+                        <input type="text" class="form-control" id="edit_username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_email" class="form-label">Email *</label>
+                        <input type="email" class="form-control" id="edit_email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_password" class="form-label">Mot de passe (laisser vide pour ne pas modifier)</label>
+                        <input type="password" class="form-control" id="edit_password" name="password" minlength="8">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_role_id" class="form-label">Rôle *</label>
+                        <select class="form-select" id="edit_role_id" name="role_id" required>
+                            <option value="">Sélectionner un rôle</option>
+                            {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    var editModal = document.getElementById('editUserModal');
+    if(!editModal) return;
+    editModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var userId = button.getAttribute('data-user-id');
+        var username = button.getAttribute('data-username');
+        var email = button.getAttribute('data-email');
+        var roleId = button.getAttribute('data-role-id');
+
+        var form = document.getElementById('editUserForm');
+        form.action = '/admin/users/' + userId + '/edit';
+        document.getElementById('edit_user_id').value = userId;
+        document.getElementById('edit_username').value = username || '';
+        document.getElementById('edit_email').value = email || '';
+        document.getElementById('edit_role_id').value = roleId || '';
+        document.getElementById('edit_password').value = '';
+    });
+});
+</script>
 
 {% endblock %}

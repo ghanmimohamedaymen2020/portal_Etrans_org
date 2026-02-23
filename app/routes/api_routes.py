@@ -1,6 +1,10 @@
 from flask import jsonify, request, Response
 import io
 import csv
+try:
+    from openpyxl import Workbook
+except Exception:
+    Workbook = None
 from flask_login import login_required, current_user
 from app import db
 from app.utils import get_agent_monthly_by_year, get_agent_totals_for_month, get_invoice_monthly_and_annual
@@ -376,8 +380,15 @@ def get_aa_details_by_reference():
         if not where_cols:
             # fallback: return empty
             return jsonify({'details': []})
-        conditions = ' OR '.join([f"{col} = :ref" for col in where_cols])
-        sql = text(f"SELECT * FROM [dbo].[View_AA_Detail] WHERE {conditions} ORDER BY 1")
+        # Build WHERE clause; prefix with table alias for joined query
+        conditions = ' OR '.join([f"d.{col} = :ref" for col in where_cols])
+
+        # If the primary reference column exists, left-join header view to include AA_H_ETA
+        if 'AA_D_Reference' in available:
+            sql = text(f"SELECT d.*, h.AA_H_ETA FROM [dbo].[View_AA_Detail] d LEFT JOIN [Dashboard].[dbo].[View_AA_SansFacture] h ON h.AA_H_Reference = d.AA_D_Reference WHERE {conditions} ORDER BY 1")
+        else:
+            sql = text(f"SELECT * FROM [dbo].[View_AA_Detail] WHERE {conditions} ORDER BY 1")
+
         rows = db.session.execute(sql, {'ref': ref}).mappings().all()
         details = [dict(r) for r in rows]
         return jsonify({'details': details, 'count': len(details)})
@@ -2430,3 +2441,70 @@ def export_aa_detail_csv():
         })
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/aa-detail/export-xlsx', methods=['GET'])
+@login_required
+def export_aa_detail_xlsx():
+    """Export AA detail as XLSX by converting existing CSV export output to Excel.
+    This avoids duplicating SQL logic: it calls `export_aa_detail_csv()` then parses CSV.
+    Requires `openpyxl` to be installed.
+    """
+    if Workbook is None:
+        return jsonify({'error': 'openpyxl is not installed on the server'}), 500
+    try:
+        # Reuse CSV export function to obtain CSV data
+        resp = export_aa_detail_csv()
+        if isinstance(resp, tuple):
+            # export_aa_detail_csv may return (response, status)
+            resp_obj = resp[0]
+        else:
+            resp_obj = resp
+
+        # If CSV exporter returned a JSON error, propagate it
+        if getattr(resp_obj, 'mimetype', '') == 'application/json':
+            return resp_obj
+
+        csv_bytes = resp_obj.get_data(as_text=True)
+        reader = csv.reader(io.StringIO(csv_bytes), delimiter=';')
+
+        wb = Workbook()
+        ws = wb.active
+        for r_idx, row in enumerate(reader, start=1):
+            for c_idx, cell in enumerate(row, start=1):
+                ws.cell(row=r_idx, column=c_idx, value=cell)
+
+        # adjust column widths lightly
+        for col in ws.columns:
+            max_length = 0
+            col_letter = None
+            for cell in col:
+                try:
+                    if cell.value:
+                        l = len(str(cell.value))
+                        if l > max_length:
+                            max_length = l
+                except Exception:
+                    continue
+                if col_letter is None:
+                    col_letter = cell.column_letter
+            if col_letter:
+                ws.column_dimensions[col_letter].width = min(max(10, max_length + 2), 60)
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        filename = 'aa_sans_facture.xlsx'
+        return Response(out.read(), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={
+            'Content-Disposition': f'attachment; filename="{filename}"'
+        })
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+# Compatibility alias: accept .xlsx extension used by some clients
+@api_bp.route('/factures/aa-detail/export.xlsx', methods=['GET'])
+@login_required
+def export_aa_detail_xlsx_alias():
+    return export_aa_detail_xlsx()
