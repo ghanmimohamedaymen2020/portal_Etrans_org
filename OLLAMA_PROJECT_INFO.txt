@@ -1,0 +1,146 @@
+Project: E-trans-portal (TransGlory Tunisie / E-Trans)
+Path: repository root
+
+Purpose:
+This file contains everything needed to recreate, run and test the E-trans Flask application locally or as a new project for Ollama.
+
+--- Environment & Python
+- Recommended Python: 3.11+ (the project virtualenv includes Python 3.12 runtime layout).
+- A virtual environment is provided at `env/`. To activate on Windows (PowerShell):
+    env\Scripts\Activate.ps1
+  or (cmd):
+    env\Scripts\activate.bat
+- Install dependencies:
+    pip install -r requirements.txt
+
+--- Requirements (from requirements.txt)
+blinker==1.9.0
+click==8.1.7
+colorama==0.4.6
+dnspython==2.8.0
+email-validator==2.0.0
+Flask==2.3.3
+Flask-Login==0.6.2
+Flask-SQLAlchemy==3.0.5
+greenlet==3.3.1
+idna==3.11
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+PyJWT==2.8.0
+pyodbc==5.3.0
+python-dotenv==1.0.0
+SQLAlchemy==2.0.46
+typing_extensions==4.15.0
+Werkzeug==2.3.7
+openpyxl==3.1.2  # added to support XLSX export
+
+Note: The app connects to MS SQL Server via ODBC; make sure the "ODBC Driver 17 for SQL Server" (or a compatible driver) is installed on the host.
+
+--- Important Environment Variables (.env recommended)
+- FLASK_ENV=development|production
+- DATABASE_URL (SQLAlchemy URL, e.g. mssql+pyodbc://USER:PASS@server/etrans?driver=ODBC+Driver+17+for+SQL+Server)
+- USERS_DATABASE_URL (optional separate DB bind for users)
+- SECRET_KEY (Flask sessions)
+- JWT_SECRET
+- MAIL_SERVER, MAIL_PORT, MAIL_USE_TLS, MAIL_USERNAME, MAIL_PASSWORD
+
+Example `.env.development`:
+SECRET_KEY=replace-me
+JWT_SECRET=replace-me
+DATABASE_URL=mssql+pyodbc://sa:YourPass@localhost/etrans?driver=ODBC+Driver+17+for+SQL+Server
+MAIL_SERVER=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=your@mail
+MAIL_PASSWORD=xxx
+
+--- DB Notes
+- The application expects an existing SQL Server database with several views used by the dashboard and exports.
+- Views referenced (ensure these exist or create equivalents):
+  - [Dashboard].[dbo].[View_AA_SansFacture]
+  - [Dashboard].[dbo].[View_AA_Total]
+  - [Dashboard].[dbo].[View_AA_Detail]
+  - [Dashboard].[dbo].[View_AA_AvecFacture]
+  - dbo.View_FF_Entete
+  - dbo.View_FF_Total
+  - dbo.View_FF_Detail
+  - dbo.View_FREIGHT_TND
+  - dbo.View_FREIGHT_TND_DuMois
+  - dbo.View_FREIGHT
+
+- There are helper scripts in the repo:
+  - `create_database.py` : attempts to create the `etrans` database on local SQL Server (interactive)
+  - `init_db.py` : creates default roles in the DB (runs within app context)
+  - `create_user_direct.py` : (if present) helper to create users directly
+
+--- Key files & entry points
+- `run.py` : main development runner (binds app and runs Flask built-in server on 0.0.0.0:5000 by default)
+  - Usage: `python run.py` (after activating venv and setting `.env`)
+- `app/` : application package
+  - `app/__init__.py` : factory `create_app()` and initialization
+  - `app/models.py` : SQLAlchemy models (`User`, `Role`, etc.)
+  - `app/routes/api_routes.py` : main API endpoints (factures, exports, totals, etc.)
+  - `app/routes/auth.py` : auth routes, admin user management (added edit user endpoint)
+  - `app/templates/` and `app/static/` : frontend Jinja templates and JS/CSS
+
+--- Important API endpoints (authentication required for most)
+- GET `/api/factures/aa-detail` : returns AA header rows with per-AA totals (aa_total_non_soumis, aa_total_soumis, aa_total_general, aa_total_tva)
+- GET `/api/factures/aa-totals` : returns aggregated totals and `total_general` (sum of per-AA total_general)
+- GET `/api/factures/details-aa?reference=<ref>` : returns detail rows from `View_AA_Detail` for the given reference; now includes `AA_H_ETA` joined from header when `AA_D_Reference` exists
+- GET `/api/factures/aa-detail/export` : CSV export of AA rows
+- GET `/api/factures/aa-detail/export-xlsx` and compatibility alias `/api/factures/aa-detail/export.xlsx` : XLSX export (requires `openpyxl`)
+
+- Other endpoints exist (FF lists, freight, invoices by currency, etc.) — see `app/routes/api_routes.py` for full list.
+
+--- Authentication & Admin
+- Uses `Flask-Login` session-based auth. Login route is form-based (`/login`) and returns a session cookie used to access `/api/*` endpoints.
+- Admin pages (user management) require `current_user.role.name == 'Admin'`.
+- Admin endpoints:
+  - `POST /admin/users/<id>/edit` : edit user fields (username, email, role_id, optional password). A UI modal was added to `app/templates/admin/manage_users.html` to call this endpoint.
+
+--- Recent functional changes (already applied)
+- `AA_H_ETA` added to the AA detail response and exports where applicable.
+- XLSX export implemented: `/factures/aa-detail/export-xlsx` and alias `/factures/aa-detail/export.xlsx`.
+- Admin user edit route added plus an edit modal in `manage_users.html`.
+- Per-AA aggregation logic added to avoid duplicate sums (CTE per_aa used in totals endpoints).
+
+--- Running the app locally (quick start)
+1. Clone repo and cd into project root.
+2. Create venv (if you need a fresh one):
+   python -m venv env
+3. Activate venv (PowerShell):
+   env\Scripts\Activate.ps1
+4. Install dependencies:
+   pip install -r requirements.txt
+5. Prepare DB / env:
+   - Ensure SQL Server reachable and driver installed (ODBC Driver 17+).
+   - Create `.env.development` or `.env` with `DATABASE_URL` and other env vars.
+   - (Optional) Run `python create_database.py` to create DB, then `python init_db.py` to create roles.
+6. Run server:
+   python run.py
+7. Open browser: http://127.0.0.1:5000/
+
+--- Downloading exports (notes)
+- Exports require authentication (session cookie set after logging in through the UI).
+- To test XLSX download manually: login via browser, then open
+  http://127.0.0.1:5000/api/factures/aa-detail/export.xlsx
+
+--- Tips for Ollama / project recreation
+- Provide the `.env.development` (without secrets) and note the DB schema expectation: several pre-built views are required for the same behavior.
+- If Ollama will run the project in a container, ensure:
+  - SQL Server is reachable from the container (or use a SQL Server container)
+  - ODBC driver and `unixODBC` installed if running on Linux, and the SQLAlchemy connection string adjusted accordingly
+- For quick mocking without SQL Server, set `FLASK_ENV=testing` to use `TestingConfig` (in-memory sqlite) but note the app expects many DB views — frontend will not show real data.
+
+--- Useful scripts
+- `python create_database.py` : create DB on local SQL Server
+- `python init_db.py` : create default roles
+- `python run.py` : start server
+- `test_connection.py` / `test_setup.py` : helper tests (see repo)
+
+--- Contact / Extra notes
+- The app uses views located under both `dbo` and `Dashboard.dbo` schemas; ensure proper schema and permissions when recreating DB objects.
+- If you need exported sample data or SQL definitions for the views, ask and I can extract the necessary SELECT definitions (if available) or provide replacement mock views for Ollama.
+
+END OF FILE
+

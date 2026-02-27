@@ -43,4 +43,6 @@ def internal_error(error):
     return render_template('errors/500.html'), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Respect the selected environment when enabling debug mode
+    debug_mode = (env == 'development')
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
