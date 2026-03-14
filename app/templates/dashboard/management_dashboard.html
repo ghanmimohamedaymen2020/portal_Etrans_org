@@ -1101,8 +1101,42 @@ document.addEventListener('DOMContentLoaded',function(){
   let listMode='summary';
   let commercialFilter=null;
   let deviseChart=null;
+  let invoiceHeaderMap = new Map();
   // Global cache for monthly activity (shared across functions)
   window.monthlyActivityCache = window.monthlyActivityCache || null;
+
+  function normalizeInvoiceRef(v){
+    try{ return String(v||'').replace(/\s+/g,'').toUpperCase(); }catch(e){ return ''; }
+  }
+
+  function extractCommercialFromItem(item){
+    if(!item) return '';
+    return item.nom_commercial || item.id_commercial || item.FF_H_IdCommercial || item.AA_H_IdCommercial || item.AA_H_NomCommercial || '';
+  }
+
+  function rebuildInvoiceHeaderMap(items){
+    invoiceHeaderMap = new Map();
+    (items || []).forEach(item => {
+      const refs = [
+        item && (item.reference ?? item.FF_H_NumFact ?? item.AA_H_Reference ?? item.AA_H_NumFacture),
+        item && item.invoice_num
+      ];
+      refs.forEach(ref => {
+        const key = normalizeInvoiceRef(ref);
+        if(!key) return;
+        const existing = invoiceHeaderMap.get(key);
+        if(!existing){
+          invoiceHeaderMap.set(key, item);
+          return;
+        }
+        const exCom = String(extractCommercialFromItem(existing) || '').trim();
+        const nwCom = String(extractCommercialFromItem(item) || '').trim();
+        if(!exCom && nwCom){
+          invoiceHeaderMap.set(key, item);
+        }
+      });
+    });
+  }
 
   // Simple HTML-escape helper for title attributes
   function escapeHtml(s){
@@ -1854,6 +1888,7 @@ document.addEventListener('DOMContentLoaded',function(){
     const term=(listSearch.value||'').toLowerCase().trim();
     const size=parseInt(listPageSize.value,10);
     const columns=currentColumns.length?currentColumns:(listData[currentListKey]?.columns)||columnSets.default;
+    rebuildInvoiceHeaderMap(currentItems);
     const filtered=currentItems.filter(item=>{
       if(!term) return true;
       const text=Object.values(item).join(' ').toLowerCase();
@@ -1882,7 +1917,7 @@ document.addEventListener('DOMContentLoaded',function(){
         let value=item[col.key]??'';
         // Fallback: ensure `nom_commercial` is shown even if the API returned a differently-named key
         if((col.key === 'nom_commercial' || (col.key||'').toString().toLowerCase() === 'nom_commercial') && (!value || value === '')){
-          value = item['nom_commercial'] || item['AA_H_NomCommercial'] || item['AA_H_NOMCOMMERCIAL'] || item['aa_h_nomcommercial'] || '';
+          value = item['nom_commercial'] || item['id_commercial'] || item['FF_H_IdCommercial'] || item['AA_H_IdCommercial'] || item['AA_H_NomCommercial'] || item['AA_H_NOMCOMMERCIAL'] || item['aa_h_nomcommercial'] || '';
         }
         // format dates
         if(col.key && (col.key.toLowerCase().includes('date') || col.key.toLowerCase().includes('eta'))){
@@ -2396,12 +2431,38 @@ document.addEventListener('DOMContentLoaded',function(){
     const inv = a.getAttribute('data-invoice');
     if(!inv) return;
     try{
+      // Exact UI fallback: take the same visible "Nom Commercial" from the clicked row.
+      let clickedRowCommercial = '';
+      try{
+        const rowEl = a.closest('tr');
+        const cell = rowEl && (rowEl.querySelector('td[data-col="nom_commercial"] .cell-content') || rowEl.querySelector('td[data-col="nom_commercial"]'));
+        if(cell) clickedRowCommercial = String(cell.textContent || '').trim();
+      }catch(err){ /* ignore */ }
+
+      // Primary source for modal header: reuse the same row already visible in the list.
+      let listHeaderCandidate = null;
+      try{
+        const invNorm = normalizeInvoiceRef(inv);
+        listHeaderCandidate = invoiceHeaderMap.get(invNorm) || (currentItems || []).find(r => {
+          const refs = [
+            r && (r.reference ?? r.FF_H_NumFact ?? r.AA_H_Reference ?? r.AA_H_NumFacture),
+            r && r.invoice_num
+          ].filter(Boolean).map(x => normalizeInvoiceRef(x));
+          return refs.includes(invNorm);
+        }) || null;
+        if(!listHeaderCandidate && clickedRowCommercial){
+          listHeaderCandidate = { nom_commercial: clickedRowCommercial };
+        } else if(listHeaderCandidate && clickedRowCommercial && (!listHeaderCandidate.nom_commercial || String(listHeaderCandidate.nom_commercial).trim()==='')){
+          listHeaderCandidate.nom_commercial = clickedRowCommercial;
+        }
+      }catch(err){ /* ignore */ }
+
       // If link marked as AA, query AA details directly
       let rows = [];
       const isAA = a.getAttribute('data-aa');
       if(isAA){
         // Try to get entete/context from aa-detail listing for a better header
-        let headerCandidate = null;
+        let headerCandidate = listHeaderCandidate;
         try{
           const listResp = await fetch('/api/factures/aa-detail?limit=0');
           if(listResp.ok){
@@ -2435,6 +2496,8 @@ document.addEventListener('DOMContentLoaded',function(){
             if(resp2.ok){ rows = j2.details || []; }
           }catch(e){ /* ignore */ }
         }
+        // Attach list row context when available so modal header can reuse list info.
+        try{ if(listHeaderCandidate) rows.__header = listHeaderCandidate; }catch(e){ /* ignore */ }
       }
       invoicesModalTitle.textContent = `Détails — ${inv}`;
       const infoEl = document.getElementById('invoices-modal-info');
@@ -2443,7 +2506,7 @@ document.addEventListener('DOMContentLoaded',function(){
         invoicesModalBody.innerHTML = `<tr><td colspan="5">Aucun détail trouvé pour ${inv}</td></tr>`;
       } else {
         // Extract entête/context: prefer entête found from AA listing (rows.__header), else use first detail row
-        const first = (rows && rows.__header) ? rows.__header : (rows[0] || {});
+        const first = (rows && rows.__header) ? rows.__header : (listHeaderCandidate || rows[0] || {});
         const getVal = (obj, keys) => {
           for(const k of keys){
             if(obj && obj[k]!==undefined && obj[k]!==null && String(obj[k]).trim()!=='') return obj[k];
@@ -2454,17 +2517,64 @@ document.addEventListener('DOMContentLoaded',function(){
         const dp = dpRaw ? formatDateValue(dpRaw) : '';
         const dossier = getVal(first, ['dossier','AA_H_Dossier','AA_D_Dossier','AA_D_DossierRef','AA_H_DossierRef']);
         const client = getVal(first, ['nom_client','AA_H_NomClient','AA_D_NomClient','AA_H_NomClientFinal']);
-        const commercial = getVal(first, ['nom_commercial','AA_H_NomCommercial','AA_D_NomCommercial','AA_H_NomCommercial']);
+        const commercial = getVal(first, ['nom_commercial','id_commercial','FF_H_IdCommercial','AA_H_IdCommercial','AA_H_NomCommercial','AA_D_NomCommercial','AA_H_NomCommercial']);
         // If header commercial is empty, try to find it in the detail rows as a fallback
         let commercialFallback = commercial;
         if(!commercialFallback || String(commercialFallback).trim()===''){
           for(const r of rows){
-            const c = getVal(r, ['nom_commercial','AA_H_NomCommercial','AA_D_NomCommercial','AA_D_NomCommercial','AA_H_NomCommercial']);
+            const c = getVal(r, ['nom_commercial','id_commercial','FF_H_IdCommercial','AA_H_IdCommercial','AA_H_NomCommercial','AA_D_NomCommercial','AA_D_NomCommercial','AA_H_NomCommercial']);
             if(c && String(c).trim()!==''){
               commercialFallback = c;
               break;
             }
           }
+        }
+        // Page-level fallback: find a commercial from already loaded list rows
+        // using the same dossier/house context.
+        if(!commercialFallback || String(commercialFallback).trim()===''){
+          try{
+            const dossierNorm = String(dossier || '').trim().toUpperCase();
+            const houseNorm = String(house || '').trim().toUpperCase();
+            const rowsPool = Array.isArray(currentItems) ? currentItems : [];
+
+            const pickCommercial = (row) => getVal(row, [
+              'nom_commercial','id_commercial','FF_H_IdCommercial',
+              'AA_H_IdCommercial','AA_H_NomCommercial','AA_D_NomCommercial'
+            ]);
+
+            // strict match: same dossier + same house
+            for(const r of rowsPool){
+              const d = String((r && (r.dossier || r.AA_H_Dossier)) || '').trim().toUpperCase();
+              const h = String((r && (r.house || r.AA_H_House)) || '').trim().toUpperCase();
+              if(dossierNorm && houseNorm && d === dossierNorm && h === houseNorm){
+                const c = pickCommercial(r);
+                if(c && String(c).trim()!==''){
+                  commercialFallback = c;
+                  break;
+                }
+              }
+            }
+
+            // relaxed match: same dossier only
+            if((!commercialFallback || String(commercialFallback).trim()==='') && dossierNorm){
+              for(const r of rowsPool){
+                const d = String((r && (r.dossier || r.AA_H_Dossier)) || '').trim().toUpperCase();
+                if(d === dossierNorm){
+                  const c = pickCommercial(r);
+                  if(c && String(c).trim()!==''){
+                    commercialFallback = c;
+                    break;
+                  }
+                }
+              }
+            }
+          }catch(err){ /* ignore */ }
+        }
+        if((!commercialFallback || String(commercialFallback).trim()==='') && clickedRowCommercial){
+          commercialFallback = clickedRowCommercial;
+        }
+        if(!commercialFallback || String(commercialFallback).trim()===''){
+          commercialFallback = '-';
         }
         const eta = getVal(first, ['eta','AA_H_ETA','AA_D_ETA']);
         const house = getVal(first, ['house','AA_H_House','AA_D_House']);

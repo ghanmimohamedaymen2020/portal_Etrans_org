@@ -1045,8 +1045,13 @@ def get_details_by_invoices():
             SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_FF_Entete'
         """)).scalars().all()
+        aa_cols = db.session.execute(text("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'View_AA_AvecFacture'
+        """)).scalars().all()
         detail_set = {c for c in detail_cols}
         entete_set = {c for c in entete_cols}
+        aa_set = {c for c in aa_cols}
 
         # preferred detail columns (alias mapping)
         preferred_detail = [
@@ -1067,6 +1072,8 @@ def get_details_by_invoices():
             ('FF_H_DateProcess', 'date_process'),
             ('FF_H_Dossier', 'dossier'),
             ('FF_H_NomClient', 'nom_client'),
+            ('FF_H_NomCommercial', 'nom_commercial'),
+            ('FF_H_IdCommercial', 'id_commercial'),
             ('FF_H_TypeFacture', 'type_facture'),
             ('FF_H_ETA', 'eta'),
             ('FF_H_House', 'house'),
@@ -1076,6 +1083,11 @@ def get_details_by_invoices():
         select_parts = [f"d.{col} AS {alias}" for col, alias in preferred_detail if col in detail_set]
         # include entete columns by joining entete and prefixing with e.
         select_parts += [f"e.{col} AS {alias}" for col, alias in preferred_entete if col in entete_set]
+        # include AA commercial fields as an additional fallback source
+        if 'AA_H_NomCommercial' in aa_set:
+            select_parts.append("a.AA_H_NomCommercial AS AA_H_NomCommercial")
+        if 'AA_H_IdCommercial' in aa_set:
+            select_parts.append("a.AA_H_IdCommercial AS AA_H_IdCommercial")
         if not select_parts:
             return jsonify({'error': 'Aucune colonne disponible dans View_FF_Detail/View_FF_Entete pour afficher les détails'}), 500
 
@@ -1085,12 +1097,72 @@ def get_details_by_invoices():
         sql = text(f"""
             SELECT {', '.join(select_parts)}
             FROM dbo.View_FF_Detail d
-            LEFT JOIN dbo.View_FF_Entete e ON d.FF_D_NumFact = e.FF_H_NumFact
+            LEFT JOIN dbo.View_FF_Entete e ON LTRIM(RTRIM(d.FF_D_NumFact)) = LTRIM(RTRIM(e.FF_H_NumFact))
+            LEFT JOIN dbo.View_AA_AvecFacture a ON LTRIM(RTRIM(a.AA_H_NumFacture)) = LTRIM(RTRIM(d.FF_D_NumFact))
             WHERE d.FF_D_NumFact IN ({placeholders})
             ORDER BY d.FF_D_NumFact
         """)
         rows = db.session.execute(sql, params).mappings().all()
         details = [dict(r) for r in rows]
+
+        # Secondary fallback: if commercial fields are still empty on detail rows,
+        # fetch them directly from header view by invoice number and backfill.
+        missing_invoices = []
+        for row in details:
+            try:
+                if (row.get('nom_commercial') is None or str(row.get('nom_commercial')).strip() == '') and row.get('invoice_num'):
+                    missing_invoices.append(str(row.get('invoice_num')).strip())
+            except Exception:
+                continue
+        missing_invoices = sorted({inv for inv in missing_invoices if inv})
+        if missing_invoices:
+            try:
+                params_hdr = {}
+                placeholders_hdr = []
+                for i, inv in enumerate(missing_invoices):
+                    k = f"h{i}"
+                    placeholders_hdr.append(f":{k}")
+                    params_hdr[k] = inv
+
+                hdr_select = ["LTRIM(RTRIM(FF_H_NumFact)) AS invoice_num"]
+                if 'FF_H_NomCommercial' in entete_set:
+                    hdr_select.append("FF_H_NomCommercial AS nom_commercial")
+                else:
+                    hdr_select.append("NULL AS nom_commercial")
+                if 'FF_H_IdCommercial' in entete_set:
+                    hdr_select.append("FF_H_IdCommercial AS id_commercial")
+                else:
+                    hdr_select.append("NULL AS id_commercial")
+
+                hdr_sql = text(f"SELECT {', '.join(hdr_select)} FROM dbo.View_FF_Entete WHERE LTRIM(RTRIM(FF_H_NumFact)) IN ({', '.join(placeholders_hdr)})")
+                hdr_rows = db.session.execute(hdr_sql, params_hdr).mappings().all()
+                hdr_map = {str((r.get('invoice_num') or '')).strip(): dict(r) for r in hdr_rows}
+
+                for row in details:
+                    inv = str((row.get('invoice_num') or '')).strip()
+                    if not inv:
+                        continue
+                    h = hdr_map.get(inv)
+                    if not h:
+                        continue
+                    if row.get('id_commercial') in (None, '') and h.get('id_commercial') not in (None, ''):
+                        row['id_commercial'] = h.get('id_commercial')
+                    if row.get('nom_commercial') in (None, '') and h.get('nom_commercial') not in (None, ''):
+                        row['nom_commercial'] = h.get('nom_commercial')
+            except Exception:
+                pass
+
+        # Ensure nom_commercial is populated when only id_commercial exists.
+        for row in details:
+            try:
+                if (row.get('nom_commercial') is None or str(row.get('nom_commercial')).strip() == '') and row.get('id_commercial') not in (None, ''):
+                    row['nom_commercial'] = row.get('id_commercial')
+                if (row.get('nom_commercial') is None or str(row.get('nom_commercial')).strip() == '') and row.get('AA_H_NomCommercial') not in (None, ''):
+                    row['nom_commercial'] = row.get('AA_H_NomCommercial')
+                if (row.get('nom_commercial') is None or str(row.get('nom_commercial')).strip() == '') and row.get('AA_H_IdCommercial') not in (None, ''):
+                    row['nom_commercial'] = row.get('AA_H_IdCommercial')
+            except Exception:
+                continue
 
         # Post-process rows to populate montant_ht_tnd when it's missing.
         # We'll try to compute/resolve values in bulk to avoid issuing one DB query per row.
