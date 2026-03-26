@@ -1,0 +1,795 @@
+:root {
+  --color-primary: #2c3e50;
+  --color-secondary: #3498db;
+  --color-success: #27ae60;
+  --color-warning: #e67e22;
+  --color-danger: #e74c3c;
+  --color-info: #3498db;
+  --color-light: #f8f9fa;
+  --color-dark: #2c3e50;
+  --color-border: #e0e0e0;
+  --border-radius: 10px;
+  --box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+  --transition: all 0.3s ease;
+}
+
+/* Indicateur de chargement global */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  transition: opacity 0.3s ease;
+}
+
+.loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  text-align: center;
+  background: white;
+  padding: 30px 40px;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  animation: fadeInUp 0.3s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 20px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--color-secondary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-spinner p {
+  color: var(--color-primary);
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.loading-spinner .loading-subtitle {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
+/* Loading inline pour les tableaux */
+.list-loading-enhanced {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px !important;
+  background: #f9f9f9;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.list-loading-enhanced .spinner-small {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e0e0;
+  border-top: 3px solid var(--color-secondary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 15px;
+}
+
+.list-loading-enhanced p {
+  color: #666;
+  font-size: 1rem;
+  margin: 5px 0;
+}
+
+.list-loading-enhanced .loading-details {
+  color: #999;
+  font-size: 0.85rem;
+}
+
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 15px;
+  box-shadow: var(--box-shadow);
+  padding: 8px 24px 0 24px;
+  height: auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+body.list-only main {
+  max-width: 100%;
+  width: 100%;
+  min-height: calc(100vh - 81px);
+  height: calc(100vh - 81px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+body.list-only .list-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  padding: 18px;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto; /* allow table scrolling when in list-only mode */
+}
+
+body.list-only .list-section table {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  margin-bottom: 0;
+  overflow: visible;
+}
+
+body.list-only main {
+  padding: 12px 18px;
+}
+
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: 2px solid var(--color-border);
+  }
+
+.welcome-section h1 {
+  color: var(--color-primary);
+  font-size: 1.8rem;
+  margin-bottom: 5px;
+}
+
+.welcome-message {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.kpi-section {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin: 8px 0 8px;
+  align-items: stretch;
+  /* Make KPI row span the full browser width */
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  box-sizing: border-box;
+  padding-left: 24px; /* match main horizontal padding */
+  padding-right: 24px;
+}
+
+.kpi-card {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 8px 10px;
+  box-shadow: var(--box-shadow);
+  border-left: 5px solid var(--color-primary);
+  transition: var(--transition);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.kpi-card:hover {
+  transform: translateY(-4px);
+}
+
+.kpi-card.active {
+  border-left-width: 8px;
+}
+
+.kpi-title {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
+.kpi-sub {
+  font-size: 0.85rem;
+  color: #777;
+}
+
+/* inline KPI numbers used inside kpi-sub (smaller than main .kpi-value but enlarged) */
+.kpi-value-inline {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* small badge shown at top-right of KPI cards (used to show counts) */
+.kpi-badge {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+.list-section {
+  display: none;
+  background: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 8px 10px;
+  margin-bottom: 0;
+  border: 1px solid var(--color-border);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Ensure the list-section fills available space */
+  height: 100%;
+  max-height: calc(100vh - 120px);
+}
+
+body.list-only .list-section {
+  display: block;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 4px;
+}
+
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-loading {
+  display: none;
+  font-size: 0.85rem;
+  color: #666;
+  align-items: center;
+  gap: 2px;
+}
+
+.list-loading.visible {
+  display: inline-flex;
+}
+
+.list-page-size {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.list-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.list-page-btn {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.list-page-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.list-page-info {
+  font-size: 0.85rem;
+  color: #666;
+  min-width: 90px;
+  text-align: center;
+}
+
+.list-search {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  min-width: 220px;
+}
+
+.list-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.list-table {
+width: 100%;
+  border-collapse: collapse;
+}
+
+.table-responsive-taux {
+  max-height: 400px;   /* hauteur du scroll */
+  overflow-y: auto;
+  overflow-x: auto;
+
+/* Sticky first column (Avis référence) when horizontally scrolling */
+.list-table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  background: #f8f9fa;
+}
+.list-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: #ffffff;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.04);
+}
+}
+
+/* ===== CORRECTION UNIQUEMENT DE LA HAUTEUR DES EN-TÊTES ===== */
+.list-table th,
+.list-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+/* Correction spécifique pour les en-têtes - hauteur fixe */
+.list-table th {
+  color: #666;
+  font-weight: 600;
+  background: #f8f9fa;
+  height: 36px !important;
+  max-height: 36px !important;
+  line-height: 24px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  vertical-align: middle;
+}
+
+/* Les lignes du tableau conservent leur hauteur automatique */
+.list-table td {
+  padding: 6px 6px;
+  height: auto;
+  line-height: normal;
+}
+
+/* Force a fixed row height when the result set is small (less than 20 rows)
+   so rows do not expand to fill the available table/container height. */
+.list-table.fixed-rows tbody tr {
+  height: 42px; /* fixed visual row height */
+}
+.list-table.fixed-rows td {
+  height: 42px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.list-table.fixed-rows td .cell-content{
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* En-têtes triables - position de l'icône corrigée */
+.list-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 20px !important;
+}
+
+.list-table th.sortable::after {
+  content: '';
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.list-table th.sortable.sort-asc::after { content: '▲'; }
+.list-table th.sortable.sort-desc::after { content: '▼'; }
+
+.table-responsive {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  display: block;
+  height: 95%;
+  max-height: 100%;
+}
+
+/* When the table uses fixed row heights for small lists, don't force
+   the container to stretch; let it size to content instead. */
+.table-responsive.fixed-auto-height {
+  height: auto !important;
+  max-height: none !important;
+}
+
+.list-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8f9fa;
+}
+
+/* Compact rows: used when the list is short to reduce row height
+   and clamp long cell content to a small number of lines. */
+.list-table.compact-rows td {
+  padding: 2px 6px;
+}
+.list-table td .cell-content{
+  display: block;
+  /* truncate long cell text to approximately 45 characters and show ellipsis */
+  max-width: 45ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list-table.compact-rows td .cell-content{
+  display: -webkit-box;
+  -webkit-line-clamp: 2; /* show at most 2 lines in compact mode */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.column-toggle {
+  position: relative;
+}
+
+.column-toggle-btn {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.column-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--box-shadow);
+  padding: 4px;
+  min-width: 220px;
+  max-height: 260px;
+  overflow: auto;
+  display: none;
+  z-index: 5;
+}
+
+.column-menu.visible {
+  display: block;
+}
+
+.column-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 2px;
+  font-size: 0.9rem;
+}
+
+.hidden-col {
+  display: none;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 4px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-danger { background:rgba(231,76,60,0.12); color:#e74c3c; }
+.status-success { background:rgba(39,174,96,0.12); color:#27ae60; }
+.status-warning { background:rgba(230,126,34,0.12); color:#e67e22; }
+.status-info { background:rgba(52,152,219,0.12); color:#3498db; }
+
+.charts-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+body.list-only .charts-section,
+body.list-only .kpi-section,
+body.list-only .dashboard-header {
+  display: none;
+}
+
+body.chart-only .list-section,
+body.chart-only .charts-section,
+body.chart-only .kpi-section,
+body.chart-only .dashboard-header {
+  display: none;
+}
+
+body.chart-only .currency-container {
+  display: block;
+}
+
+body.chart-only.show-chart-list .list-section {
+  display: block;
+}
+
+.chart-container {
+  background: white;
+  border-radius: var(--border-radius);
+  padding: 25px;
+  box-shadow: var(--box-shadow);
+}
+
+/* Modal for invoice list */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.modal-overlay.visible { display: flex; }
+.modal-content {
+  background: #fff;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 80vh;
+  overflow: auto;
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+.modal-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:8px }
+.modal-close { background:none;border:0;font-size:1.1rem;cursor:pointer }
+.modal-table { width:100%; border-collapse:collapse }
+.modal-table th, .modal-table td{ padding:6px 8px;border-bottom:1px solid var(--color-border); text-align:left }
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chart-header h2 {
+  color: var(--color-primary);
+  font-size: 1.3rem;
+}
+
+.chart-wrapper {
+  position: relative;
+  height: 220px;
+  width: 100%;
+}
+
+.currency-container {
+  display: none;
+  margin-top: 20px;
+}
+
+.currency-container.visible {
+  display: block;
+}
+
+
+.devise-commercial-summary {
+ max-height: 500px;   /* hauteur que tu veux */
+}
+
+
+.devise-commercial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.devise-commercial-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--color-primary);
+}
+
+.devise-commercial-header .filter-label {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.devise-commercial-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.devise-commercial-table th,
+.devise-commercial-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef1f4;
+  text-align: left;
+.list-section-mini {
+  background: #fff;
+  border-radius: var(--border-radius);
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--box-shadow);
+}
+}
+
+.devise-commercial-table th {
+  font-weight: 600;
+  color: #3d4c63;
+  background: #f7f9fc;
+}
+
+.devise-commercial-table .commercial-link {
+  color: #3498db;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.activity-list {
+  margin-top: 20px;
+}
+
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: rgba(52,152,219,0.08);
+}
+
+@media (max-width: 1200px) {
+  .charts-section { grid-template-columns:1fr; }
+  .kpi-section { grid-template-columns: repeat(4, 1fr); gap:10px; }
+}
+
+@media (max-width: 768px) {
+  .kpi-section { grid-template-columns: repeat(2, 1fr); gap:8px; }
+}
+
+@media (max-width: 480px) {
+  .kpi-section { grid-template-columns: 1fr; gap:6px; }
+}
+  /* Sticky first column and horizontal scroll adjustments for lists */
+  .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  body.list-only .list-section { overflow-x: auto; }
+
+  /* Sticky table header: keep header visible when vertically scrolling */
+  #list-table thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+  }
+
+  /* Make the first column (Numéro Avis) sticky when horizontally scrolling */
+  #list-table th:first-child,
+  #list-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+    background: #fff;
+  }
+
+  /* Ensure the top-left corner (header + first column) sits above both header and column */
+  #list-table thead th:first-child {
+    z-index: 12;
+  }
+
+  /* Small visual separation shadow when stuck */
+  #list-table td:first-child { box-shadow: 2px 0 5px -2px rgba(0,0,0,0.15); }
+
+  /* Slight shadow under header to separate from rows */
+  #list-table thead th { box-shadow: 0 2px 5px -2px rgba(0,0,0,0.08); }
+
+  /* Ensure cell content truncation behaves nicely */
+  #list-table td .cell-content { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

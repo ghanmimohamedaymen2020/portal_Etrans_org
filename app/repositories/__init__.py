@@ -1,3 +1,4 @@
-"""Repository package for data access layer."""
+from app.repositories.base import BaseRepository
+from app.repositories.dossier_repository import DossierRepository, AvisArriveeRepository
 
-__all__ = ["BaseRepository"]
+__all__ = ["BaseRepository", "DossierRepository", "AvisArriveeRepository"]

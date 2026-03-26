@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+{% block title %}Gestion des Rôles & Permissions — E-Trans{% endblock %}
+
+{% block css %}
+<style>
+:root {
+  --color-primary: #2c3e50;
+  --color-success: #27ae60;
+  --color-danger:  #e74c3c;
+  --color-warning: #f39c12;
+  --color-info:    #3498db;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+body { background: #f5f6fa; }
+
+.page-header {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 20px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.page-header h1 { margin: 0; font-size: 1.4rem; }
+
+.container { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+
+.panel {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 30px;
+  overflow: hidden;
+}
+.panel-header {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-header h2 { margin: 0; font-size: 1.05rem; }
+.panel-body { padding: 20px; }
+
+/* Roles grid */
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.role-card {
+  border: 2px solid #e8ecef;
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color .2s, box-shadow .2s;
+}
+.role-card:hover { border-color: var(--color-info); box-shadow: var(--shadow); }
+.role-card.active { border-color: var(--color-primary); background: #f0f4f8; }
+.role-card.system { border-color: var(--color-warning); }
+
+.role-name { font-weight: 700; font-size: 1rem; color: var(--color-primary); }
+.role-desc { font-size: 0.85rem; color: #666; margin-top: 4px; }
+.role-meta { font-size: 0.78rem; color: #999; margin-top: 8px; display: flex; gap: 12px; }
+.badge-system {
+  display: inline-block;
+  background: var(--color-warning);
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
+/* Permissions editor */
+.perm-editor { display: none; }
+.perm-editor.visible { display: block; }
+
+.perm-category { margin-bottom: 20px; }
+.perm-category-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--color-primary);
+  border-bottom: 2px solid #e8ecef;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+.perm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.perm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #e8ecef;
+  background: #fafafa;
+  font-size: 0.88rem;
+}
+.perm-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
+.perm-item label { cursor: pointer; flex: 1; }
+
+/* User overrides */
+.user-search { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 16px; }
+.user-list { max-height: 300px; overflow-y: auto; border: 1px solid #e8ecef; border-radius: 6px; }
+.user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.user-item:last-child { border-bottom: none; }
+.user-item:hover { background: #f8f9fa; }
+
+/* Buttons */
+.btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn-primary { background: var(--color-primary); color: #fff; }
+.btn-success { background: var(--color-success); color: #fff; }
+.btn-danger  { background: var(--color-danger);  color: #fff; }
+.btn-sm { padding: 4px 12px; font-size: 0.82rem; }
+
+/* Modal */
+.modal-bg {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-bg.open { display: flex; }
+.modal-box {
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 28px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.2);
+}
+.modal-box h3 { margin: 0 0 18px; font-size: 1.1rem; color: var(--color-primary); }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 0.88rem; font-weight: 600; margin-bottom: 5px; }
+.form-group input, .form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: #333; color: #fff;
+  padding: 12px 20px; border-radius: 8px;
+  font-size: 0.9rem; z-index: 9999;
+  opacity: 0; transition: opacity .3s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: var(--color-success); }
+.toast.error   { background: var(--color-danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-shield-alt"></i> Gestion des Rôles & Permissions</h1>
+  <a href="{{ url_for('auth.admin_users') }}" class="btn btn-primary" style="font-size:0.85rem;">
+    <i class="fas fa-users"></i> Utilisateurs
+  </a>
+</div>
+
+<div class="container">
+
+  <!-- ── Rôles ─────────────────────────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2><i class="fas fa-user-tag"></i> Rôles</h2>
+      <button class="btn btn-success btn-sm" onclick="openCreateModal()">
+        <i class="fas fa-plus"></i> Nouveau rôle
+      </button>
+    </div>
+    <div class="panel-body">
+      <div class="roles-grid" id="roles-grid">
+        <div style="color:#999;font-size:.9rem;">Chargement…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Éditeur de permissions ─────────────────────────────────────────── -->
+  <div class="panel perm-editor" id="perm-editor">
+    <div class="panel-header">
+      <h2 id="perm-editor-title"><i class="fas fa-key"></i> Permissions du rôle</h2>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm" style="background:#e8ecef;color:#333;" onclick="checkAll(true)">Tout cocher</button>
+        <button class="btn btn-sm" style="background:#e8ecef;color:#333;" onclick="checkAll(false)">Tout décocher</button>
+        <button class="btn btn-success btn-sm" onclick="saveRolePermissions()">
+          <i class="fas fa-save"></i> Enregistrer
+        </button>
+        <button class="btn btn-danger btn-sm" id="delete-role-btn" onclick="deleteRole()">
+          <i class="fas fa-trash"></i> Supprimer
+        </button>
+      </div>
+    </div>
+    <div class="panel-body" id="perm-editor-body">
+    </div>
+  </div>
+
+  <!-- ── Overrides par utilisateur ──────────────────────────────────────── -->
+  <div class="panel perm-editor" id="user-override-panel">
+    <div class="panel-header">
+      <h2><i class="fas fa-user-cog"></i> Permissions personnalisées par utilisateur</h2>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:.9rem;color:#666;margin-bottom:14px;">
+        Sélectionnez un utilisateur pour surcharger ses permissions individuellement
+        (prioritaire sur le rôle).
+      </p>
+      <input type="text" class="user-search" id="user-search" placeholder="Rechercher un utilisateur…" oninput="filterUsers()">
+      <div class="user-list" id="user-list">
+        <div style="padding:12px;color:#999;">Chargement…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Modal : créer / éditer rôle ───────────────────────────────────────── -->
+<div class="modal-bg" id="role-modal">
+  <div class="modal-box">
+    <h3 id="modal-title">Nouveau rôle</h3>
+    <div class="form-group">
+      <label>Nom du rôle *</label>
+      <input type="text" id="modal-name" placeholder="Ex: Commercial Sud">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="modal-desc" rows="2" placeholder="Description optionnelle"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#e8ecef;color:#333;" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-success btn-sm" onclick="submitRoleModal()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal : overrides utilisateur ─────────────────────────────────────── -->
+<div class="modal-bg" id="user-perm-modal">
+  <div class="modal-box" style="max-width:640px;">
+    <h3 id="user-perm-modal-title">Permissions de l'utilisateur</h3>
+    <p style="font-size:.85rem;color:#666;margin-bottom:12px;">
+      <strong style="color:var(--color-warning);">🔒 Verrouillé par rôle</strong> &nbsp;
+      <strong style="color:var(--color-success);">✅ Accordé</strong> &nbsp;
+      <strong style="color:var(--color-danger);">❌ Retiré</strong>
+    </p>
+    <div id="user-perm-modal-body" style="max-height:380px;overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" style="background:#e8ecef;color:#333;" onclick="closeUserModal()">Annuler</button>
+      <button class="btn btn-sm" style="background:var(--color-warning);color:#fff;" onclick="resetUserOverrides()">Réinitialiser</button>
+      <button class="btn btn-success btn-sm" onclick="saveUserOverrides()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let catalog    = {};   // { category: [{code, label}] }
+let allRoles   = [];
+let allUsers   = [];
+let activeRole = null; // role object currently selected
+let editUserId = null;
+let userRolePerms = []; // permissions from the user's role
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  [catalog, allRoles, allUsers] = await Promise.all([
+    api('/api/permissions/catalog'),
+    api('/api/roles'),
+    api('/api/users'),
+  ]);
+  renderRoles();
+  renderUserList();
+  document.getElementById('user-override-panel').classList.add('visible');
+});
+
+// ─── API helper ───────────────────────────────────────────────────────────
+async function api(url, opts = {}) {
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Erreur');
+  return data;
+}
+
+// ─── Roles rendering ─────────────────────────────────────────────────────
+function renderRoles() {
+  const grid = document.getElementById('roles-grid');
+  if (!allRoles.length) { grid.innerHTML = '<div style="color:#999">Aucun rôle.</div>'; return; }
+
+  grid.innerHTML = allRoles.map(r => `
+    <div class="role-card ${r.is_system ? 'system' : ''} ${activeRole?.id === r.id ? 'active' : ''}"
+         onclick="selectRole(${r.id})">
+      <div class="role-name">
+        ${r.name}
+        ${r.is_system ? '<span class="badge-system">Système</span>' : ''}
+      </div>
+      <div class="role-desc">${r.description || '<em style="color:#bbb">Aucune description</em>'}</div>
+      <div class="role-meta">
+        <span><i class="fas fa-users"></i> ${r.user_count} utilisateur(s)</span>
+        <span><i class="fas fa-key"></i> ${r.permissions.length} permission(s)</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Select role → show perm editor ──────────────────────────────────────
+function selectRole(id) {
+  activeRole = allRoles.find(r => r.id === id);
+  if (!activeRole) return;
+
+  // Update UI
+  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  const editor = document.getElementById('perm-editor');
+  editor.classList.add('visible');
+  document.getElementById('perm-editor-title').innerHTML =
+    `<i class="fas fa-key"></i> Permissions — <strong>${activeRole.name}</strong>`;
+
+  const deleteBtn = document.getElementById('delete-role-btn');
+  deleteBtn.style.display = activeRole.is_system ? 'none' : 'inline-block';
+
+  renderPermEditor(activeRole.permissions);
+}
+
+function renderPermEditor(grantedCodes) {
+  const body = document.getElementById('perm-editor-body');
+  const granted = new Set(grantedCodes);
+  const isSystem = activeRole?.is_system;
+
+  body.innerHTML = Object.entries(catalog).map(([cat, perms]) => `
+    <div class="perm-category">
+      <div class="perm-category-title">${cat}</div>
+      <div class="perm-grid">
+        ${perms.map(p => `
+          <div class="perm-item">
+            <input type="checkbox" id="perm_${p.code}" value="${p.code}"
+              ${granted.has(p.code) ? 'checked' : ''}
+              ${isSystem ? 'disabled' : ''}>
+            <label for="perm_${p.code}">${p.label}</label>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function checkAll(state) {
+  document.querySelectorAll('#perm-editor-body input[type=checkbox]:not(:disabled)')
+    .forEach(cb => cb.checked = state);
+}
+
+async function saveRolePermissions() {
+  if (!activeRole) return;
+  const codes = [...document.querySelectorAll('#perm-editor-body input[type=checkbox]:checked')]
+    .map(cb => cb.value);
+  try {
+    await api(`/api/roles/${activeRole.id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissions: codes }),
+    });
+    activeRole.permissions = codes;
+    toast('Permissions enregistrées ✅', 'success');
+    allRoles = await api('/api/roles');
+    renderRoles();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteRole() {
+  if (!activeRole || activeRole.is_system) return;
+  if (!confirm(`Supprimer le rôle "${activeRole.name}" ?`)) return;
+  try {
+    await api(`/api/roles/${activeRole.id}`, { method: 'DELETE' });
+    toast('Rôle supprimé', 'success');
+    activeRole = null;
+    document.getElementById('perm-editor').classList.remove('visible');
+    allRoles = await api('/api/roles');
+    renderRoles();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── Create role modal ────────────────────────────────────────────────────
+function openCreateModal() {
+  document.getElementById('modal-name').value = '';
+  document.getElementById('modal-desc').value = '';
+  document.getElementById('role-modal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('role-modal').classList.remove('open');
+}
+async function submitRoleModal() {
+  const name = document.getElementById('modal-name').value.trim();
+  if (!name) { toast('Le nom est requis', 'error'); return; }
+  try {
+    await api('/api/roles', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        description: document.getElementById('modal-desc').value.trim(),
+        permissions: [],
+      }),
+    });
+    closeModal();
+    toast('Rôle créé ✅', 'success');
+    allRoles = await api('/api/roles');
+    renderRoles();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── User list ────────────────────────────────────────────────────────────
+function renderUserList(filter = '') {
+  const list = document.getElementById('user-list');
+  const users = allUsers.filter(u =>
+    u.username.toLowerCase().includes(filter.toLowerCase()) ||
+    (u.email || '').toLowerCase().includes(filter.toLowerCase())
+  );
+  if (!users.length) { list.innerHTML = '<div style="padding:12px;color:#999;">Aucun utilisateur trouvé.</div>'; return; }
+
+  list.innerHTML = users.map(u => `
+    <div class="user-item">
+      <div>
+        <strong>${u.username}</strong>
+        <span style="font-size:.82rem;color:#888;margin-left:8px;">${u.email || ''}</span>
+        <br>
+        <span style="font-size:.8rem;color:var(--color-info);">${u.role || ''}</span>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="openUserPermModal(${u.id}, '${u.username}')">
+        <i class="fas fa-sliders-h"></i> Personnaliser
+      </button>
+    </div>
+  `).join('');
+}
+
+function filterUsers() {
+  renderUserList(document.getElementById('user-search').value);
+}
+
+// ─── User perm modal ──────────────────────────────────────────────────────
+async function openUserPermModal(userId, username) {
+  editUserId = userId;
+  document.getElementById('user-perm-modal-title').textContent = `Permissions — ${username}`;
+  const modal = document.getElementById('user-perm-modal');
+  modal.classList.add('open');
+
+  const body = document.getElementById('user-perm-modal-body');
+  body.innerHTML = '<div style="padding:16px;color:#999;">Chargement…</div>';
+
+  try {
+    const data = await api(`/api/users/${userId}/permissions`);
+    userRolePerms = data.role_perms || [];
+    const overrideMap = {};
+    (data.overrides || []).forEach(o => overrideMap[o.code] = o.granted);
+
+    body.innerHTML = Object.entries(catalog).map(([cat, perms]) => `
+      <div class="perm-category">
+        <div class="perm-category-title">${cat}</div>
+        <div class="perm-grid">
+          ${perms.map(p => {
+            const inRole = userRolePerms.includes(p.code);
+            const override = overrideMap[p.code];
+            // Three states: role-only (no override), forced-granted, forced-denied
+            const checked  = override === true  ? 'checked' : (override === undefined && inRole ? 'checked' : '');
+            const denied   = override === false;
+            const style    = denied ? 'opacity:.5;text-decoration:line-through;' : '';
+            const title    = inRole ? 'Accordé par le rôle' : 'Non accordé par le rôle';
+            return `
+              <div class="perm-item" style="${style}">
+                <input type="checkbox" id="up_${p.code}" value="${p.code}" data-role="${inRole}"
+                  ${checked} title="${title}">
+                <label for="up_${p.code}" style="font-size:.83rem;">${p.label}</label>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    body.innerHTML = `<div style="color:red;padding:12px;">${e.message}</div>`;
+  }
+}
+
+function closeUserModal() {
+  document.getElementById('user-perm-modal').classList.remove('open');
+  editUserId = null;
+}
+
+async function saveUserOverrides() {
+  if (!editUserId) return;
+  const checkboxes = document.querySelectorAll('#user-perm-modal-body input[type=checkbox]');
+  const overrides = [];
+
+  checkboxes.forEach(cb => {
+    const code   = cb.value;
+    const inRole = cb.dataset.role === 'true';
+    const checked = cb.checked;
+
+    // Only store override if it differs from the role
+    if (checked && !inRole) overrides.push({ code, granted: true });
+    if (!checked && inRole)  overrides.push({ code, granted: false });
+  });
+
+  try {
+    await api(`/api/users/${editUserId}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ overrides }),
+    });
+    toast(`${overrides.length} override(s) enregistré(s) ✅`, 'success');
+    closeUserModal();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function resetUserOverrides() {
+  if (!editUserId) return;
+  if (!confirm('Réinitialiser les permissions personnalisées ?')) return;
+  try {
+    await api(`/api/users/${editUserId}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ reset: true }),
+    });
+    toast('Permissions réinitialisées ✅', 'success');
+    closeUserModal();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+{% endblock %}

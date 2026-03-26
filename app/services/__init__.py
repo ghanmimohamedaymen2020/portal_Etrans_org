@@ -1,7 +1,4 @@
-"""Services package for business logic.
+from app.services.auth_service import AuthService
+from app.services.dossier_service import DossierService
 
-Import specific service classes here when implemented, e.g.:
-# from .dossier_service import DossierService
-"""
-
-__all__ = []
+__all__ = ["AuthService", "DossierService"]

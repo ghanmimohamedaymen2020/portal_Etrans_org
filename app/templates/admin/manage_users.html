@@ -74,12 +74,12 @@
                                 </td>
                                 <td>
                                     {% if user.id != current_user.id %}
-                                    <form method="POST" action="{{ url_for('auth.toggle_user', user_id=user.id) }}" style="display: inline;">
+                                    <form method="POST" action="{{ url_for('auth.admin_toggle_user', user_id=user.id) }}" style="display: inline;">
                                         <button type="submit" class="btn btn-sm btn-warning" title="Activer/Désactiver">
                                             <i class="fas fa-power-off"></i>
                                         </button>
                                     </form>
-                                    <form method="POST" action="{{ url_for('auth.delete_user', user_id=user.id) }}" 
+                                    <form method="POST" action="{{ url_for('auth.admin_delete_user', user_id=user.id) }}" 
                                           onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?');" 
                                           style="display: inline;">
                                         <button type="submit" class="btn btn-sm btn-danger" title="Supprimer">
@@ -114,7 +114,7 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form method="POST" action="{{ url_for('auth.create_user') }}">
+            <form method="POST" action="{{ url_for('auth.admin_create_user') }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="username" class="form-label">Nom d'utilisateur *</label>

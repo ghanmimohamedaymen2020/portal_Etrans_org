@@ -1,48 +1,24 @@
+"""Point d'entrée de l'application E-trans Portal."""
 import os
+
 from dotenv import load_dotenv
-from app import create_app, db
 
-# Determine environment and load corresponding .env file if present
-env = os.environ.get('FLASK_ENV', 'development')
-dotenv_path = f'.env.{env}'
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
-else:
-    # fallback to default .env
-    load_dotenv()
+# Charger le fichier .env correspondant à l'environnement
+env = os.environ.get("FLASK_ENV", "development")
+dotenv_path = f".env.{env}"
+load_dotenv(dotenv_path if os.path.exists(dotenv_path) else ".env")
 
-# Créer l'application
+from app import create_app, db  # noqa: E402
+
 app = create_app(env)
+
 
 @app.shell_context_processor
 def make_shell_context():
-    """Contexte shell pour flask shell"""
-    return {'db': db}
+    """Variables disponibles dans `flask shell`."""
+    return {"db": db, "app": app}
 
-@app.before_request
-def before_request():
-    """Avant chaque requête"""
-    pass
 
-@app.after_request
-def after_request(response):
-    """Après chaque requête"""
-    return response
-
-@app.errorhandler(404)
-def not_found(error):
-    """Erreur 404"""
-    from flask import render_template
-    return render_template('errors/404.html'), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Erreur 500"""
-    db.session.rollback()
-    from flask import render_template
-    return render_template('errors/500.html'), 500
-
-if __name__ == '__main__':
-    # Respect the selected environment when enabling debug mode
-    debug_mode = (env == 'development')
-    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    debug_mode = env == "development"
+    app.run(debug=debug_mode, host="0.0.0.0", port=5000)

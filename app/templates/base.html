@@ -21,7 +21,7 @@
     {% block css %}{% endblock %}
     
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
 </head>
 <body class="d-flex flex-column min-vh-100">
     
@@ -61,7 +61,7 @@
                             <div class="user-info">
                                 <div class="user-name fw-semibold">{{ current_user.username }}</div>
                                 <div class="user-role badge bg-primary bg-opacity-25 text-primary border-0">
-                                    {{ current_user.role.name }}
+                                    {{ current_user.role.name if current_user.role else 'Sans role' }}
                                 </div>
                             </div>
                         </div>
