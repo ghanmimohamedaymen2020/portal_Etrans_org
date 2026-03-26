@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const dateColumnSelect=document.getElementById('date-column-select');
   const dateFromInput=document.getElementById('date-from');
   const dateToInput=document.getElementById('date-to');
+  const resetFiltersBtn=document.getElementById('reset-filters-btn');
   const listFilterError=document.getElementById('list-filter-error');
   const listPageSize=document.getElementById('list-page-size');
   const listPagePrev=document.getElementById('list-page-prev');
@@ -417,6 +418,18 @@ document.addEventListener('DOMContentLoaded',function(){
   function setListFilterError(message){
     if(!listFilterError) return;
     listFilterError.textContent=message||'';
+  }
+
+  function resetAdvancedFilters(){
+    if(listSearch) listSearch.value='';
+    if(searchColumnSelect) searchColumnSelect.value='';
+    if(searchModeSelect) searchModeSelect.value='contains';
+    if(dateColumnSelect) dateColumnSelect.value='';
+    if(dateFromInput) dateFromInput.value='';
+    if(dateToInput) dateToInput.value='';
+    setListFilterError('');
+    currentPage=1;
+    if(currentListKey) applySearchFilter();
   }
 
   function getNormalizedItemValue(item, key){
@@ -1241,6 +1254,12 @@ document.addEventListener('DOMContentLoaded',function(){
       applySearchFilter();
     });
   });
+
+  if(resetFiltersBtn){
+    resetFiltersBtn.addEventListener('click',function(){
+      resetAdvancedFilters();
+    });
+  }
 
   if(listPagePrev){
     listPagePrev.addEventListener('click',function(){

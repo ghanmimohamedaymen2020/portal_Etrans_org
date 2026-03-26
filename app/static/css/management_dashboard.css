@@ -357,6 +357,10 @@ body.list-only .list-section {
   cursor: pointer;
 }
 
+.list-reset-btn {
+  white-space: nowrap;
+}
+
 .list-page-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
