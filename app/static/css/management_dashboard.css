@@ -301,6 +301,15 @@ body.list-only .list-section {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.advanced-filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .list-loading {
@@ -321,6 +330,16 @@ body.list-only .list-section {
   padding: 4px 6px;
   font-size: 0.9rem;
   background: #fff;
+}
+
+.list-filter-select,
+.list-filter-date {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  background: #fff;
+  min-height: 32px;
 }
 
 .list-pagination {
@@ -356,6 +375,12 @@ body.list-only .list-section {
   padding: 4px 6px;
   font-size: 0.9rem;
   min-width: 220px;
+}
+
+.list-filter-error {
+  color: #b42318;
+  font-size: 0.82rem;
+  min-height: 18px;
 }
 
 .list-title {
@@ -754,6 +779,26 @@ body.chart-only.show-chart-list .list-section {
 
 @media (max-width: 768px) {
   .kpi-section { grid-template-columns: repeat(2, 1fr); gap:8px; }
+  .list-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .list-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .list-search {
+    min-width: 180px;
+    flex: 1 1 220px;
+  }
+  .advanced-filters {
+    width: 100%;
+  }
+  .list-filter-select,
+  .list-filter-date,
+  .list-page-size {
+    flex: 1 1 150px;
+  }
 }
 
 @media (max-width: 480px) {

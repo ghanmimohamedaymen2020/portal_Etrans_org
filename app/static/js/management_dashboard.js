@@ -42,6 +42,12 @@ document.addEventListener('DOMContentLoaded',function(){
   const listTableBody=document.querySelector('#list-table tbody');
   const listHeaderRow=document.getElementById('list-header-row');
   const listSearch=document.getElementById('list-search');
+  const searchColumnSelect=document.getElementById('search-column-select');
+  const searchModeSelect=document.getElementById('search-mode-select');
+  const dateColumnSelect=document.getElementById('date-column-select');
+  const dateFromInput=document.getElementById('date-from');
+  const dateToInput=document.getElementById('date-to');
+  const listFilterError=document.getElementById('list-filter-error');
   const listPageSize=document.getElementById('list-page-size');
   const listPagePrev=document.getElementById('list-page-prev');
   const listPageNext=document.getElementById('list-page-next');
@@ -289,6 +295,7 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       listHeaderRow.appendChild(th);
     });
+    populateAdvancedFilterOptions(columns);
     renderColumnMenu(columns);
       try{ if(typeof makeTablesSortable==='function') makeTablesSortable(); }catch(e){}
   }
@@ -372,6 +379,83 @@ document.addEventListener('DOMContentLoaded',function(){
     const mm=String(date.getMonth()+1).padStart(2,'0');
     const yyyy=date.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
+  }
+
+  function isDateColumnKey(key){
+    const normalized=(key||'').toString().toLowerCase();
+    return normalized.includes('date') || normalized.includes('eta');
+  }
+
+  function parseFlexibleDate(value, endOfDay=false){
+    if(!value) return null;
+    if(value instanceof Date && !Number.isNaN(value.getTime())){
+      return value;
+    }
+    if(typeof value === 'string'){
+      const trimmed=value.trim();
+      const frMatch=trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if(frMatch){
+        const parsed=new Date(Number(frMatch[3]), Number(frMatch[2]) - 1, Number(frMatch[1]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+      const isoMatch=trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if(isoMatch){
+        const parsed=new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+    }
+    const parsed=new Date(value);
+    if(Number.isNaN(parsed.getTime())) return null;
+    if(endOfDay){
+      parsed.setHours(23,59,59,999);
+    }else{
+      parsed.setHours(0,0,0,0);
+    }
+    return parsed;
+  }
+
+  function setListFilterError(message){
+    if(!listFilterError) return;
+    listFilterError.textContent=message||'';
+  }
+
+  function getNormalizedItemValue(item, key){
+    let value=item ? item[key] : '';
+    if((key === 'nom_commercial' || (key||'').toString().toLowerCase() === 'nom_commercial') && (!value || value === '')){
+      value = item['nom_commercial'] || item['id_commercial'] || item['FF_H_IdCommercial'] || item['AA_H_IdCommercial'] || item['AA_H_NomCommercial'] || item['AA_H_NOMCOMMERCIAL'] || item['aa_h_nomcommercial'] || '';
+    }
+    if(isDateColumnKey(key)){
+      return String(formatDateValue(value) || value || '').toLowerCase().trim();
+    }
+    return String(value ?? '').toLowerCase().trim();
+  }
+
+  function populateAdvancedFilterOptions(columns){
+    if(searchColumnSelect){
+      const previousValue=searchColumnSelect.value;
+      searchColumnSelect.innerHTML='<option value="">Toutes les colonnes</option>';
+      columns.forEach(col=>{
+        const option=document.createElement('option');
+        option.value=col.key;
+        option.textContent=col.label;
+        searchColumnSelect.appendChild(option);
+      });
+      searchColumnSelect.value=columns.some(col=>col.key===previousValue) ? previousValue : '';
+    }
+
+    if(dateColumnSelect){
+      const previousValue=dateColumnSelect.value;
+      const dateColumns=columns.filter(col=>isDateColumnKey(col.key));
+      dateColumnSelect.innerHTML='<option value="">Toutes les dates</option>';
+      dateColumns.forEach(col=>{
+        const option=document.createElement('option');
+        option.value=col.key;
+        option.textContent=col.label;
+        dateColumnSelect.appendChild(option);
+      });
+      dateColumnSelect.value=dateColumns.some(col=>col.key===previousValue) ? previousValue : '';
+      dateColumnSelect.disabled=dateColumns.length===0;
+    }
   }
 
   function formatAmount(value){
@@ -533,8 +617,9 @@ document.addEventListener('DOMContentLoaded',function(){
               // show export button for invoices and bind download
                 if(exportCsvBtn && window.PERMS && window.PERMS.exportCsv){
                 exportCsvBtn.style.display='inline-block';
+                exportCsvBtn.textContent='Exporter XLSX';
                 exportCsvBtn.onclick = function(){
-                  let url = `/api/factures/ff-list/export?month=${monthFilter}&year=${yearFilter}`;
+                  let url = `/api/factures/ff-list/export.xlsx?month=${monthFilter}&year=${yearFilter}`;
                   if(opts && opts.type) url += `&type=${encodeURIComponent(opts.type)}`;
                   window.location = url;
                 };
@@ -546,6 +631,7 @@ document.addEventListener('DOMContentLoaded',function(){
           // enable XLSX export for not-stamped list
           if(exportCsvBtn && window.PERMS && window.PERMS.exportXlsx){
             exportCsvBtn.style.display='inline-block';
+            exportCsvBtn.textContent='Exporter XLSX';
             exportCsvBtn.onclick = function(){
               window.location = '/api/factures/aa-detail/export.xlsx';
             };
@@ -595,8 +681,9 @@ document.addEventListener('DOMContentLoaded',function(){
         // show export button for generated freight items
         if(exportCsvBtn){
           exportCsvBtn.style.display='inline-block';
+          exportCsvBtn.textContent='Exporter XLSX';
           exportCsvBtn.onclick = function(){
-            let url = `/api/freight/items/export`;
+            let url = `/api/freight/items/export.xlsx`;
             window.location = url;
           };
         }
@@ -848,13 +935,55 @@ document.addEventListener('DOMContentLoaded',function(){
 
   function applySearchFilter(){
     const term=(listSearch.value||'').toLowerCase().trim();
+    const selectedSearchColumn=searchColumnSelect ? searchColumnSelect.value : '';
+    const searchMode=(searchModeSelect && searchModeSelect.value === 'exact') ? 'exact' : 'contains';
+    const selectedDateColumn=dateColumnSelect ? dateColumnSelect.value : '';
+    const fromRaw=dateFromInput ? dateFromInput.value : '';
+    const toRaw=dateToInput ? dateToInput.value : '';
+    const fromDate=parseFlexibleDate(fromRaw, false);
+    const toDate=parseFlexibleDate(toRaw, true);
     const size=parseInt(listPageSize.value,10);
     const columns=currentColumns.length?currentColumns:(listData[currentListKey]?.columns)||columnSets.default;
+    const searchableColumns=selectedSearchColumn ? columns.filter(col=>col.key===selectedSearchColumn) : columns;
+    const dateColumns=selectedDateColumn ? columns.filter(col=>col.key===selectedDateColumn) : columns.filter(col=>isDateColumnKey(col.key));
     rebuildInvoiceHeaderMap(currentItems);
+
+    if((fromRaw && !fromDate) || (toRaw && !toDate)){
+      setListFilterError('Veuillez saisir des dates valides.');
+    }else if(fromDate && toDate && fromDate > toDate){
+      setListFilterError('La date de début doit être antérieure ou égale à la date de fin.');
+    }else if((fromDate || toDate) && dateColumns.length===0){
+      setListFilterError('Aucune colonne de date disponible pour cette liste.');
+    }else{
+      setListFilterError('');
+    }
+
     const filtered=currentItems.filter(item=>{
-      if(!term) return true;
-      const text=Object.values(item).join(' ').toLowerCase();
-      return text.includes(term);
+      const hasDateValidationError=((fromRaw && !fromDate) || (toRaw && !toDate) || (fromDate && toDate && fromDate > toDate));
+      if(hasDateValidationError) return false;
+
+      let matchesText=true;
+      if(term){
+        matchesText=searchableColumns.some(col=>{
+          const value=getNormalizedItemValue(item, col.key);
+          if(!value) return false;
+          return searchMode==='exact' ? value===term : value.includes(term);
+        });
+      }
+      if(!matchesText) return false;
+
+      if(fromDate || toDate){
+        return dateColumns.some(col=>{
+          const value=item ? item[col.key] : null;
+          const parsed=parseFlexibleDate(value, false);
+          if(!parsed) return false;
+          if(fromDate && parsed < fromDate) return false;
+          if(toDate && parsed > toDate) return false;
+          return true;
+        });
+      }
+
+      return true;
     });
     const totalPages=size>0?Math.max(1,Math.ceil(filtered.length/size)):1;
     if(currentPage>totalPages) currentPage=totalPages;
@@ -1102,6 +1231,16 @@ document.addEventListener('DOMContentLoaded',function(){
       applySearchFilter();
     });
   }
+
+  [searchColumnSelect,searchModeSelect,dateColumnSelect,dateFromInput,dateToInput].forEach(control=>{
+    if(!control) return;
+    const eventName=control.tagName==='INPUT' ? 'input' : 'change';
+    control.addEventListener(eventName,function(){
+      if(!currentListKey) return;
+      currentPage=1;
+      applySearchFilter();
+    });
+  });
 
   if(listPagePrev){
     listPagePrev.addEventListener('click',function(){
@@ -1895,6 +2034,13 @@ document.addEventListener('DOMContentLoaded',function(){
       const items=await fetchFreightItems();
       listMode='detail';
       currentListKey='generated';
+      if(exportCsvBtn){
+        exportCsvBtn.style.display='inline-block';
+        exportCsvBtn.textContent='Exporter XLSX';
+        exportCsvBtn.onclick=function(){
+          window.location='/api/freight/items/export.xlsx';
+        };
+      }
       if(listBack) listBack.style.display='inline-flex';
       listTitle.textContent=`Détails - ${devise}`;
       currentColumns=columnSets.freightDetails;
@@ -1925,6 +2071,13 @@ document.addEventListener('DOMContentLoaded',function(){
       const items=await fetchFreightItems();
       listMode='detail';
       currentListKey='generated';
+      if(exportCsvBtn){
+        exportCsvBtn.style.display='inline-block';
+        exportCsvBtn.textContent='Exporter XLSX';
+        exportCsvBtn.onclick=function(){
+          window.location='/api/freight/items/export.xlsx';
+        };
+      }
       commercialFilter=commercial;
       if(listBack) listBack.style.display='inline-flex';
       listTitle.textContent=`Dossiers - ${commercial}`;

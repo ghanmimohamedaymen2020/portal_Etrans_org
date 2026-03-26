@@ -1724,3 +1724,50 @@ def export_ff_list_csv():
         })
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
+
+
+@api_bp.route('/factures/ff-list/export.xlsx', methods=['GET'])
+@login_required
+def export_ff_list_xlsx():
+    """Export FF list as XLSX (reuses CSV logic then converts to Excel)."""
+    if Workbook is None:
+        return jsonify({'error': 'openpyxl is not installed on the server'}), 500
+    try:
+        resp = export_ff_list_csv()
+        resp_obj = resp[0] if isinstance(resp, tuple) else resp
+        if getattr(resp_obj, 'mimetype', '') == 'application/json':
+            return resp_obj
+        csv_bytes = resp_obj.get_data(as_text=True)
+        reader = csv.reader(io.StringIO(csv_bytes), delimiter=';')
+        wb = Workbook()
+        ws = wb.active
+        for r_idx, row in enumerate(reader, start=1):
+            for c_idx, cell in enumerate(row, start=1):
+                ws.cell(row=r_idx, column=c_idx, value=cell)
+        for col in ws.columns:
+            max_length = 0
+            col_letter = None
+            for cell in col:
+                try:
+                    if cell.value:
+                        l = len(str(cell.value))
+                        if l > max_length:
+                            max_length = l
+                except Exception:
+                    continue
+                if col_letter is None:
+                    col_letter = cell.column_letter
+            if col_letter:
+                ws.column_dimensions[col_letter].width = min(max(10, max_length + 2), 60)
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        month = request.args.get('month', '')
+        year = request.args.get('year', '')
+        req_type = request.args.get('type', 'all')
+        filename = f"factures_{req_type}_{month}_{year}.xlsx"
+        return Response(out.read(),
+                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500

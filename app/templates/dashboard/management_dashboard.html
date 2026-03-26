@@ -239,13 +239,28 @@
         <div class="column-menu" id="column-menu"></div>
       </div>
       {% if has_perm("export.csv") or has_perm("export.xlsx") %}
-      <button id="export-csv-btn" class="list-page-btn" style="display:none;margin-left:8px;">Exporter CSV</button>
+      <button id="export-csv-btn" class="list-page-btn" style="display:none;margin-left:8px;">Exporter XLSX</button>
       {% endif %}
+      <div class="advanced-filters">
+        <select class="list-filter-select" id="search-column-select" aria-label="Colonne de recherche">
+          <option value="">Toutes les colonnes</option>
+        </select>
+        <select class="list-filter-select" id="search-mode-select" aria-label="Mode de recherche">
+          <option value="contains">Contient</option>
+          <option value="exact">Exact</option>
+        </select>
+        <select class="list-filter-select" id="date-column-select" aria-label="Colonne de date">
+          <option value="">Toutes les dates</option>
+        </select>
+        <input type="date" class="list-filter-date" id="date-from" aria-label="Date de début">
+        <input type="date" class="list-filter-date" id="date-to" aria-label="Date de fin">
+      </div>
       <span class="list-loading" id="list-loading">
         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
         Chargement...
       </span>
       <input type="text" class="list-search" id="list-search" placeholder="Rechercher...">
+      <span class="list-filter-error" id="list-filter-error" role="alert" aria-live="polite"></span>
       <span class="text-muted" id="list-count"></span>
     </div>
   </div>
