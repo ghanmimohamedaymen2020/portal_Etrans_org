@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}GESTION DES ROUTING TGY TUNISIE — E-Trans{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/excel_module.css') }}">
+{% endblock %}
+
+{% block content %}
+<script>document.body.classList.add('excel-module-page');</script>
+<div id="excel-perms"
+     data-view="{{ 1 if has_perm('excel.view') else 0 }}"
+     data-create="{{ 1 if has_perm('excel.create') else 0 }}"
+     data-edit="{{ 1 if has_perm('excel.edit') else 0 }}"
+     data-remove="{{ 1 if has_perm('excel.delete') else 0 }}"
+     data-export-xlsx="{{ 1 if has_perm('excel.export.xlsx') else 0 }}"
+     data-manage-columns="{{ 1 if has_perm('excel.columns.manage') else 0 }}"
+     style="display:none;"></div>
+
+<div class="em-section">
+  <div class="em-toolbar">
+    <div class="em-title">GESTION DES ROUTING TGY TUNISIE</div>
+    <div class="em-controls">
+        <select id="page-size">
+          <option value="10">10</option>
+          <option value="12">12</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="0">Tous</option>
+        </select>
+
+        <div class="em-pagination">
+          <button id="btn-prev">Précédent</button>
+          <span id="page-info" class="em-page-info"></span>
+          <button id="btn-next">Suivant</button>
+        </div>
+
+        <div class="em-col-toggle">
+          <button type="button" id="column-toggle-btn">Colonnes</button>
+          <div class="em-col-menu" id="column-menu"></div>
+        </div>
+
+        {% if has_perm('excel.export.xlsx') %}
+        <button id="btn-export">Exporter XLSX</button>
+        {% endif %}
+        {% if has_perm('excel.create') %}
+        <button id="btn-import">Importer XLSX</button>
+        <input id="import-file" type="file" accept=".xlsx,.xlsm" style="display:none;">
+        {% endif %}
+        {% if has_perm('excel.columns.manage') %}
+        <button id="btn-manage-columns">+ Colonne</button>
+        {% endif %}
+        {% if has_perm('excel.create') %}
+        <button id="btn-new">Nouveau</button>
+        {% endif %}
+
+        <input id="search-input" type="text" class="em-search" placeholder="Rechercher...">
+        <span id="records-count" class="em-count"></span>
+    </div>
+  </div>
+
+  <div class="em-table-wrap">
+    <table class="em-table" id="excel-table">
+      <thead><tr id="excel-head-row"></tr></thead>
+      <tbody id="excel-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="recordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="record-modal-title">Enregistrement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="record-form" class="row g-2"></form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="save-record">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="columnModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nouvelle colonne</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label">Libellé</label>
+          <input id="new-col-label" class="form-control">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Clé (optionnel)</label>
+          <input id="new-col-key" class="form-control" placeholder="ex: booking_no">
+        </div>
+        <div>
+          <label class="form-label">Type</label>
+          <select id="new-col-type" class="form-select">
+            <option value="text">Texte</option>
+            <option value="number">Nombre</option>
+            <option value="date">Date</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="save-column">Ajouter</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/excel_module.js') }}"></script>
+{% endblock %}

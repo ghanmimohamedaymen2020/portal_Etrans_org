@@ -76,6 +76,13 @@
       <div class="kpi-value" data-kpi-value="invoices-magasinage">0</div>
     </div>
 {% endif %}
+{% if has_perm("excel.view") %}
+  <div class="kpi-card" data-url="{{ url_for('dashboard.excel_module_page') }}" style="border-left-color:#0d6efd;">
+    <div class="kpi-title" data-kpi-title="excel-routing">GESTION DES ROUTING TGY TUNISIE</div>
+    <div class="kpi-value" data-kpi-value="excel-routing-lines">0</div>
+    <div class="kpi-sub">Nbr ligne</div>
+  </div>
+{% endif %}
 </div>
 
 {% if has_perm("chart.ca_mensuel") or has_perm("chart.ca_activite") %}

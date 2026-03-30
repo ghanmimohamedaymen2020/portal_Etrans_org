@@ -9,3 +9,4 @@ from app.routes.api import factures     # noqa: F401, E402
 from app.routes.api import freight      # noqa: F401, E402
 from app.routes.api import admin        # noqa: F401, E402
 from app.routes.api import permissions  # noqa: F401, E402
+from app.routes.api import excel_module  # noqa: F401, E402

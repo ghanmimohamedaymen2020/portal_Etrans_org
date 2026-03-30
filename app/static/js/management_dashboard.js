@@ -804,6 +804,10 @@ document.addEventListener('DOMContentLoaded',function(){
         const now = new Date();
         const curYear = now.getFullYear();
         const curMonth = now.getMonth() + 1;
+        const excelRoutingTitleEl = document.querySelector('[data-kpi-title="excel-routing"]');
+        if(excelRoutingTitleEl){
+          excelRoutingTitleEl.textContent = `GESTION DES ROUTING TGY TUNISIE (${curYear})`;
+        }
         // Replace any title markers '(mois)' with the current month name and year
         try{
           const monthNamesFull = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -926,6 +930,17 @@ document.addEventListener('DOMContentLoaded',function(){
         } catch(e) { 
             console.error('Erreur chargement Freight:', e);
           }
+
+        try {
+          const excelResp = await fetch('/api/excel-module/records?page=1&per_page=1', { credentials: 'include' });
+          if (excelResp.ok) {
+            const excelJson = await excelResp.json();
+            const totalLines = Number(excelJson.total) || 0;
+            setKpiValue('excel-routing-lines', totalLines.toLocaleString('fr-FR'));
+          }
+        } catch (e) {
+          setKpiValue('excel-routing-lines', '0');
+        }
 
         // Monthly activity reporting removed by user request — use empty cache
         window.monthlyActivityCache = {};
@@ -1110,6 +1125,11 @@ document.addEventListener('DOMContentLoaded',function(){
 
   document.querySelectorAll('.kpi-card').forEach(card=>{
     card.addEventListener('click',function(){
+      const targetUrl=this.getAttribute('data-url');
+      if(targetUrl){
+        window.location.href=targetUrl;
+        return;
+      }
       document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('active'));
       this.classList.add('active');
       const key=this.getAttribute('data-key');

@@ -27,9 +27,16 @@ ALL_PERMISSIONS = [
     ("detail.agent",            "Détail",   "Liste Agent (page liste)"),
     ("detail.magasinage",       "Détail",   "Liste Magasinage (page liste)"),
     ("detail.surestaries",      "Détail",   "Liste Surestaries (page liste)"),
+    # ── Gestion Des Routing TGY Tunisie ──────────────────────────────────
+    ("excel.view",              "Module",   "Voir GESTION DES ROUTING TGY TUNISIE"),
+    ("excel.create",            "Module",   "Créer enregistrement GESTION DES ROUTING TGY TUNISIE"),
+    ("excel.edit",              "Module",   "Modifier enregistrement GESTION DES ROUTING TGY TUNISIE"),
+    ("excel.delete",            "Module",   "Supprimer enregistrement GESTION DES ROUTING TGY TUNISIE"),
+    ("excel.columns.manage",    "Module",   "Gérer colonnes additionnelles GESTION DES ROUTING TGY TUNISIE"),
     # ── Export ──────────────────────────────────────────────────────────────
     ("export.csv",              "Export",   "Export CSV"),
     ("export.xlsx",             "Export",   "Export XLSX"),
+    ("excel.export.xlsx",       "Export",   "Export GESTION DES ROUTING TGY TUNISIE XLSX"),
 ]
 
 PERMISSION_CODES = {code for code, *_ in ALL_PERMISSIONS}

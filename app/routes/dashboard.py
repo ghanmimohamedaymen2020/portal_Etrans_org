@@ -1,6 +1,7 @@
 """Routes du dashboard — redirige vers le bon template selon le rôle."""
 from flask import Blueprint, current_app, redirect, render_template, url_for
 from flask_login import current_user, login_required
+from app.services.permission_service import has_permission
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -43,3 +44,11 @@ def home():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.index"))
     return render_template("main/index.html")
+
+
+@dashboard_bp.route("/excel-module")
+@login_required
+def excel_module_page():
+    if not has_permission(current_user, "excel.view"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("dashboard/excel_module.html")
