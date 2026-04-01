@@ -34,6 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const columnModal = columnModalEl ? new bootstrap.Modal(columnModalEl) : null;
   const btnSaveColumn = document.getElementById('save-column');
 
+  const importResultModalEl = document.getElementById('importResultModal');
+  const importResultModal = importResultModalEl ? new bootstrap.Modal(importResultModalEl) : null;
+  const importResultSummary = document.getElementById('import-result-summary');
+  const importDuplicatesWrap = document.getElementById('import-duplicates-wrap');
+  const importDuplicatesList = document.getElementById('import-duplicates-list');
+
   let columns = [];
   let items = [];
   let currentPage = 1;
@@ -339,13 +345,37 @@ document.addEventListener('DOMContentLoaded', () => {
     formData.append('file', file);
     try {
       const res = await fetch('/api/excel-module/import.xlsx', { method: 'POST', body: formData });
-      const payload = await res.json();
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      const payload = contentType.includes('application/json')
+        ? await res.json()
+        : { message: (await res.text()).trim() || `HTTP ${res.status}` };
+      if (typeof payload.message === 'string' && payload.message.toLowerCase().includes('<!doctype html')) {
+        payload.message = `Erreur serveur HTTP ${res.status}. Consultez les logs backend.`;
+      }
       if (!res.ok) throw new Error(payload?.message || payload?.error || `HTTP ${res.status}`);
       const skipped = payload.skipped || 0;
+      const duplicates = Array.isArray(payload.duplicate_refs) ? payload.duplicate_refs : [];
       const msg = skipped > 0
         ? `Import terminé: ${payload.imported || 0} ligne(s) ajoutée(s), ${skipped} doublon(s) ignoré(s) (REF déjà existant).`
         : `Import terminé: ${payload.imported || 0} ligne(s) ajoutée(s).`;
-      alert(msg);
+
+      if (importResultSummary) {
+        importResultSummary.textContent = msg;
+      }
+      if (importDuplicatesWrap && importDuplicatesList) {
+        if (duplicates.length) {
+          importDuplicatesWrap.style.display = '';
+          importDuplicatesList.value = duplicates
+            .map(item => `Ligne ${item.row}: ${item.ref}`)
+            .join('\n');
+        } else {
+          importDuplicatesWrap.style.display = 'none';
+          importDuplicatesList.value = '';
+        }
+      }
+
+      if (importResultModal) importResultModal.show();
+      else alert(msg);
       await refreshAll();
     } catch (e) {
       alert(`Erreur import: ${e.message}`);

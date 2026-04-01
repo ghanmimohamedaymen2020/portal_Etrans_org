@@ -1,8 +1,9 @@
 from datetime import datetime
 import re
 
-from flask import jsonify, request, Response
+from flask import current_app, jsonify, request, Response
 from flask_login import current_user, login_required
+from sqlalchemy.exc import IntegrityError
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -66,8 +67,38 @@ def _check_perm(code: str):
     return None
 
 
+def _normalize_excel_table_names(users_engine):
+    """Ensure legacy table names exist even if a previous run renamed them."""
+    if users_engine.dialect.name != "mssql":
+        return
+
+    rename_pairs = [
+        ("suivie_cs_imp_columns", "excel_columns"),
+        ("suivie_cs_imp", "excel_records"),
+        ("suivie_cs_imp_extra_values", "excel_record_extra_values"),
+    ]
+
+    with users_engine.begin() as conn:
+        existing_tables = {
+            row[0]
+            for row in conn.execute(
+                db.text("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo'")
+            )
+        }
+
+        for source_name, target_name in rename_pairs:
+            if target_name in existing_tables:
+                continue
+            if source_name not in existing_tables:
+                continue
+            conn.execute(db.text(f"EXEC sp_rename '[dbo].[{source_name}]', '{target_name}'"))
+            existing_tables.remove(source_name)
+            existing_tables.add(target_name)
+
+
 def _ensure_module_ready():
     users_engine = db.engines.get("users")
+    _normalize_excel_table_names(users_engine)
     ExcelColumn.__table__.create(bind=users_engine, checkfirst=True)
     ExcelRecord.__table__.create(bind=users_engine, checkfirst=True)
     ExcelRecordExtraValue.__table__.create(bind=users_engine, checkfirst=True)
@@ -395,126 +426,143 @@ def excel_records_import_xlsx():
     err = _check_perm("excel.create")
     if err:
         return err
-    _ensure_module_ready()
 
-    if load_workbook is None:
-        return jsonify({"message": "openpyxl non disponible"}), 500
+    try:
+        _ensure_module_ready()
 
-    uploaded = request.files.get("file")
-    if not uploaded or not uploaded.filename:
-        return jsonify({"message": "Fichier Excel requis"}), 400
+        if load_workbook is None:
+            return jsonify({"message": "openpyxl non disponible"}), 500
 
-    filename = uploaded.filename.lower()
-    if not (filename.endswith(".xlsx") or filename.endswith(".xlsm")):
-        return jsonify({"message": "Format non supporté. Utilisez .xlsx"}), 400
+        uploaded = request.files.get("file")
+        if not uploaded or not uploaded.filename:
+            return jsonify({"message": "Fichier Excel requis"}), 400
 
-    wb = load_workbook(uploaded, data_only=True)
-    ws = wb.active
+        filename = uploaded.filename.lower()
+        if not (filename.endswith(".xlsx") or filename.endswith(".xlsm")):
+            return jsonify({"message": "Format non supporté. Utilisez .xlsx"}), 400
 
-    header_row = None
-    header_index = None
-    scan_max = min(ws.max_row or 1, 25)
-    for idx, row in enumerate(ws.iter_rows(min_row=1, max_row=scan_max, values_only=True), start=1):
-        if not row:
-            continue
-        candidate = [str(h).strip() if h is not None else "" for h in row]
-        non_empty = [h for h in candidate if h]
-        if len(non_empty) >= 2:
-            header_row = candidate
-            header_index = idx
-            break
+        wb = load_workbook(uploaded, data_only=True)
+        ws = wb.active
 
-    if not header_row or not header_index:
-        return jsonify({"message": "Aucune entête détectée"}), 400
-
-    headers = header_row
-
-    columns = _active_columns()
-    by_normalized = {}
-    for c in columns:
-        by_normalized[_normalize_key(c.key)] = c
-        by_normalized[_normalize_key(c.label)] = c
-
-    auto_create_allowed = has_permission(current_user, "excel.columns.manage")
-    unknown_headers = []
-
-    for h in headers:
-        if not h:
-            continue
-        n = _normalize_key(h)
-        if n in by_normalized:
-            continue
-        if auto_create_allowed:
-            key = n
-            suffix = 1
-            while ExcelColumn.query.filter_by(key=key).first() is not None:
-                key = f"{n}_{suffix}"
-                suffix += 1
-            col = ExcelColumn(
-                key=key,
-                label=h,
-                data_type="text",
-                is_default=False,
-                is_active=True,
-                position=_next_column_position(),
-                created_by=getattr(current_user, "username", None),
-            )
-            db.session.add(col)
-            db.session.flush()
-            by_normalized[_normalize_key(col.key)] = col
-            by_normalized[_normalize_key(col.label)] = col
-        else:
-            unknown_headers.append(h)
-
-    columns = _active_columns()
-    imported = 0
-    skipped = 0
-
-    # Précharger tous les REF existants pour éviter N requêtes en boucle
-    existing_refs = {
-        r for (r,) in db.session.query(ExcelRecord.ref).filter(ExcelRecord.ref.isnot(None)).all()
-    }
-
-    for row in ws.iter_rows(min_row=header_index + 1, values_only=True):
-        if not row or not any(v is not None and str(v).strip() != "" for v in row):
-            continue
-
-        payload = {"extra": {}}
-        for idx, cell in enumerate(row):
-            if idx >= len(headers):
+        header_row = None
+        header_index = None
+        scan_max = min(ws.max_row or 1, 25)
+        for idx, row in enumerate(ws.iter_rows(min_row=1, max_row=scan_max, values_only=True), start=1):
+            if not row:
                 continue
-            header = headers[idx]
-            if not header:
+            candidate = [str(h).strip() if h is not None else "" for h in row]
+            non_empty = [h for h in candidate if h]
+            if len(non_empty) >= 2:
+                header_row = candidate
+                header_index = idx
+                break
+
+        if not header_row or not header_index:
+            return jsonify({"message": "Aucune entête détectée"}), 400
+
+        headers = header_row
+
+        columns = _active_columns()
+        by_normalized = {}
+        for c in columns:
+            by_normalized[_normalize_key(c.key)] = c
+            by_normalized[_normalize_key(c.label)] = c
+
+        auto_create_allowed = has_permission(current_user, "excel.columns.manage")
+        unknown_headers = []
+
+        for h in headers:
+            if not h:
                 continue
-            col = by_normalized.get(_normalize_key(header))
-            if not col:
+            n = _normalize_key(h)
+            if n in by_normalized:
                 continue
-            value = "" if cell is None else str(cell)
-            if col.is_default:
-                payload[col.key] = value
+            if auto_create_allowed:
+                key = n
+                suffix = 1
+                while ExcelColumn.query.filter_by(key=key).first() is not None:
+                    key = f"{n}_{suffix}"
+                    suffix += 1
+                col = ExcelColumn(
+                    key=key,
+                    label=h,
+                    data_type="text",
+                    is_default=False,
+                    is_active=True,
+                    position=_next_column_position(),
+                    created_by=getattr(current_user, "username", None),
+                )
+                db.session.add(col)
+                db.session.flush()
+                by_normalized[_normalize_key(col.key)] = col
+                by_normalized[_normalize_key(col.label)] = col
             else:
-                payload["extra"][col.key] = value
+                unknown_headers.append(h)
 
-        # Dédoublonnage par REF : ignorer si un enregistrement avec ce REF existe déjà
-        row_ref = (payload.get("ref") or "").strip()
-        if row_ref and row_ref in existing_refs:
-            skipped += 1
-            continue
+        columns = _active_columns()
+        imported = 0
+        skipped = 0
+        duplicate_refs = []
 
-        rec = ExcelRecord(
-            created_by=getattr(current_user, "username", None),
-            updated_by=getattr(current_user, "username", None),
-        )
-        _apply_payload_to_record(rec, payload, columns)
-        db.session.add(rec)
-        if row_ref:
-            existing_refs.add(row_ref)
-        imported += 1
+        existing_refs = {
+            r for (r,) in db.session.query(ExcelRecord.ref).filter(ExcelRecord.ref.isnot(None)).all()
+        }
 
-    db.session.commit()
-    return jsonify({
-        "message": "Import terminé",
-        "imported": imported,
-        "skipped": skipped,
-        "ignored_headers": unknown_headers,
-    })
+        for row_number, row in enumerate(
+            ws.iter_rows(min_row=header_index + 1, values_only=True),
+            start=header_index + 1,
+        ):
+            if not row or not any(v is not None and str(v).strip() != "" for v in row):
+                continue
+
+            payload = {"extra": {}}
+            for idx, cell in enumerate(row):
+                if idx >= len(headers):
+                    continue
+                header = headers[idx]
+                if not header:
+                    continue
+                col = by_normalized.get(_normalize_key(header))
+                if not col:
+                    continue
+                value = "" if cell is None else str(cell)
+                if col.is_default:
+                    payload[col.key] = value
+                else:
+                    payload["extra"][col.key] = value
+
+            row_ref = (payload.get("ref") or "").strip()
+            if row_ref and row_ref in existing_refs:
+                skipped += 1
+                duplicate_refs.append({"row": row_number, "ref": row_ref})
+                continue
+
+            rec = ExcelRecord(
+                created_by=getattr(current_user, "username", None),
+                updated_by=getattr(current_user, "username", None),
+            )
+            _apply_payload_to_record(rec, payload, columns)
+            db.session.add(rec)
+            if row_ref:
+                existing_refs.add(row_ref)
+            imported += 1
+
+        db.session.commit()
+        return jsonify({
+            "message": "Import terminé",
+            "imported": imported,
+            "skipped": skipped,
+            "duplicate_refs": duplicate_refs,
+            "ignored_headers": unknown_headers,
+        })
+    except IntegrityError:
+        db.session.rollback()
+        current_app.logger.exception("Erreur d'integrite SQL pendant import XLSX")
+        return jsonify({
+            "message": "Import impossible: conflit de donnees en base (contrainte SQL). "
+                       "Verifiez les doublons et la coherence des colonnes puis reessayez.",
+        }), 500
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Erreur import XLSX GESTION DES ROUTING TGY TUNISIE")
+        return jsonify({"message": f"Erreur import XLSX: {exc.__class__.__name__}"}), 500

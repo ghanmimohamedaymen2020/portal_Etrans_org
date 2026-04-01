@@ -41,7 +41,7 @@ DEFAULT_EXCEL_COLUMNS = [
 
 
 class ExcelColumn(db.Model):
-    __tablename__ = "suivie_cs_imp_columns"
+    __tablename__ = "excel_columns"
     __bind_key__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -56,7 +56,7 @@ class ExcelColumn(db.Model):
 
 
 class ExcelRecord(db.Model):
-    __tablename__ = "suivie_cs_imp"
+    __tablename__ = "excel_records"
     __bind_key__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -101,12 +101,12 @@ class ExcelRecord(db.Model):
 
 
 class ExcelRecordExtraValue(db.Model):
-    __tablename__ = "suivie_cs_imp_extra_values"
+    __tablename__ = "excel_record_extra_values"
     __bind_key__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    record_id = db.Column(db.Integer, db.ForeignKey("suivie_cs_imp.id", ondelete="CASCADE"), nullable=False, index=True)
-    column_id = db.Column(db.Integer, db.ForeignKey("suivie_cs_imp_columns.id", ondelete="CASCADE"), nullable=False, index=True)
+    record_id = db.Column(db.Integer, db.ForeignKey("excel_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    column_id = db.Column(db.Integer, db.ForeignKey("excel_columns.id", ondelete="CASCADE"), nullable=False, index=True)
     value = db.Column(db.Text)
 
     record = db.relationship(

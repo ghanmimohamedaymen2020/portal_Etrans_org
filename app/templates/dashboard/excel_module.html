@@ -117,6 +117,27 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="importResultModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Résultat de l'import XLSX</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="import-result-summary" class="mb-3"></p>
+        <div id="import-duplicates-wrap" style="display:none;">
+          <label for="import-duplicates-list" class="form-label">Liste des REF en doublon</label>
+          <textarea id="import-duplicates-list" class="form-control" rows="12" readonly></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
