@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Connexion - TransGlory Tunisie{% endblock %}
+{% block title %}{{ t('Connexion - TransGlory Tunisie') }}{% endblock %}
 
 {% block css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
@@ -14,15 +14,15 @@
                 <img src="{{ url_for('static', filename='img/Transglory.png') }}" 
                      alt="TransGlory Tunisie" 
                      class="login-logo">
-                <h1 class="login-title">Espace E-Trans</h1>
+                <h1 class="login-title">{{ t('Espace E-Trans') }}</h1>
                 <p class="login-subtitle">
-                    Connectez-vous pour accéder à votre espace personnel
+                    {{ t('Connectez-vous pour accéder à votre espace personnel') }}
                 </p>
             </div>
 
             <form method="POST" id="loginForm">
                 <div class="form-group">
-                    <label for="username" class="form-label">Nom d'utilisateur</label>
+                    <label for="username" class="form-label">{{ t("Nom d'utilisateur") }}</label>
                     <div class="input-group">
                         <span class="input-group-text">
                             <i class="fas fa-user"></i>
@@ -31,7 +31,7 @@
                                class="form-control" 
                                id="username" 
                                name="username" 
-                               placeholder="Votre nom d'utilisateur" 
+                               placeholder="{{ t("Votre nom d'utilisateur") }}" 
                                required
                                autocomplete="username"
                                autofocus>
@@ -39,7 +39,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="password" class="form-label">Mot de passe</label>
+                    <label for="password" class="form-label">{{ t('Mot de passe') }}</label>
                     <div class="input-group">
                         <span class="input-group-text">
                             <i class="fas fa-lock"></i>
@@ -48,7 +48,7 @@
                                class="form-control" 
                                id="password" 
                                name="password" 
-                               placeholder="Votre mot de passe" 
+                               placeholder="{{ t('Votre mot de passe') }}" 
                                required
                                autocomplete="current-password">
                     </div>
@@ -61,28 +61,28 @@
                                id="remember" 
                                name="remember">
                         <label class="form-check-label" for="remember">
-                            Se souvenir de moi
+                            {{ t('Se souvenir de moi') }}
                         </label>
                     </div>
                     <a href="{{ url_for('auth.forgot_password') }}" class="forgot-link">
-                        Mot de passe oublié ?
+                        {{ t('Mot de passe oublié ?') }}
                     </a>
                 </div>
 
                 <button type="submit" class="btn btn-login w-100" id="submitBtn">
-                    Se connecter
+                    {{ t('Se connecter') }}
                 </button>
             </form>
 
             <div class="login-footer">
                 <p class="footer-text">
-                    Problème de connexion ? 
+                    {{ t('Problème de connexion ?') }} 
                     <a href="mailto:support@transglory.tn" class="footer-link">
-                        Contactez le support
+                        {{ t('Contactez le support') }}
                     </a>
                 </p>
                 <p class="footer-text">
-                    © 2026 TransGlory Tunisie. Tous droits réservés.
+                    © 2026 TransGlory Tunisie. {{ t('Tous droits réservés.') }}
                 </p>
             </div>
         </div>
@@ -93,7 +93,7 @@
     document.getElementById('loginForm').addEventListener('submit', function(e) {
         const submitBtn = document.getElementById('submitBtn');
         submitBtn.classList.add('loading');
-        submitBtn.innerHTML = '<span>Connexion en cours...</span>';
+        submitBtn.innerHTML = '<span>' + {{ t('Connexion en cours...')|tojson }} + '</span>';
     });
 </script>
 {% endblock %}

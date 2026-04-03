@@ -28,6 +28,11 @@ function withLoading(fn, message = 'Chargement...') {
 }
 
 document.addEventListener('DOMContentLoaded',function(){
+  // i18n helpers — available only after appI18n is bootstrapped by base.html
+  const _t = window.appI18n && typeof window.appI18n.t === 'function' ? window.appI18n.t : (s => s);
+  const _lang = (window.appI18n && window.appI18n.lang) || 'fr';
+  const _monthNamesEn = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
   // Afficher le chargement si on est en mode liste
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('listOnly')) {
@@ -571,7 +576,7 @@ document.addEventListener('DOMContentLoaded',function(){
       hiddenColumns=new Set();
       saveHiddenColumns();
     }
-    listTitle.textContent=data.title;
+    listTitle.textContent=_t(data.title);
     // If showing invoices, append the month/year to the title
     if(key==='invoices'){
       let usedMonth=null;
@@ -582,12 +587,14 @@ document.addEventListener('DOMContentLoaded',function(){
       if(usedMonth===null) usedMonth=now.getMonth()+1;
       if(usedYear===null) usedYear=now.getFullYear();
       const monthNamesFull=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-      const baseTitle=(data.title||'').replace('(mois)','').trim();
+      const monthDisplay=_lang==='en' ? _monthNamesEn[usedMonth-1] : monthNamesFull[usedMonth-1];
+      const baseTitle=_t((data.title||'').replace('(mois)','').trim());
       // map type code to human-readable label when provided in opts
       const typeMap = { 'T':'Timbrage', 'M':'Magasinage', 'S':'Surestarie', 'A':'Agent' };
       const typeCode = opts && opts.type ? String(opts.type).toUpperCase() : null;
-      const typeLabel = typeCode && typeMap[typeCode] ? ` ${typeMap[typeCode]}` : '';
-      listTitle.textContent=`${baseTitle}${typeLabel} ${monthNamesFull[usedMonth-1]} ${usedYear}`;
+      const typeName = typeCode && typeMap[typeCode] ? typeMap[typeCode] : '';
+      const typeLabel = typeName ? ` ${_t(typeName)}` : '';
+      listTitle.textContent=`${baseTitle}${typeLabel} ${monthDisplay} ${usedYear}`;
     }
     listTableBody.innerHTML='';
     let columns = key==='generated'?columnSets.freightSummary:(data.columns||columnSets.default);
@@ -811,9 +818,10 @@ document.addEventListener('DOMContentLoaded',function(){
         // Replace any title markers '(mois)' with the current month name and year
         try{
           const monthNamesFull = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+          const _curMonthDisp = _lang === 'en' ? _monthNamesEn[curMonth-1] : monthNamesFull[curMonth-1];
           document.querySelectorAll('.kpi-card .kpi-title').forEach(el=>{
             if(!el || !el.textContent) return;
-            el.textContent = el.textContent.replace(/\(mois\)/i, `(${monthNamesFull[curMonth-1]} ${curYear})`);
+            el.textContent = el.textContent.replace(/\(mois\)/i, `(${_curMonthDisp} ${curYear})`);
           });
         }catch(e){ /* ignore DOM errors during initialisation */ }
         
@@ -868,7 +876,7 @@ document.addEventListener('DOMContentLoaded',function(){
         try{
           const monthNamesFull = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
           const agentTitleEl = document.querySelector('.kpi-card[data-key="invoices-agent"] .kpi-title');
-          if(agentTitleEl) agentTitleEl.textContent = `Factures - Agent (${monthNamesFull[curMonth-1]} ${curYear})`;
+          if(agentTitleEl) agentTitleEl.textContent = `${_t('Factures - Agent')} (${_lang === 'en' ? _monthNamesEn[curMonth-1] : monthNamesFull[curMonth-1]} ${curYear})`;
           const agentMainVal = document.querySelector('[data-kpi-value="invoices-agent"]');
           if(agentMainVal) agentMainVal.textContent = '';
         }catch(e){ /* ignore */ }
@@ -1302,7 +1310,7 @@ document.addEventListener('DOMContentLoaded',function(){
       if(currentListKey!=='generated') return;
       listMode='summary';
       commercialFilter=null;
-      listTitle.textContent=listData.generated.title;
+      listTitle.textContent=_t(listData.generated.title);
       listBack.style.display='none';
       currentColumns=columnSets.freightSummary;
       renderColumns(currentColumns);
@@ -1639,7 +1647,7 @@ document.addEventListener('DOMContentLoaded',function(){
         // Attach list row context when available so modal header can reuse list info.
         try{ if(listHeaderCandidate) rows.__header = listHeaderCandidate; }catch(e){ /* ignore */ }
       }
-      invoicesModalTitle.textContent = `Détails — ${inv}`;
+      invoicesModalTitle.textContent = `${_t('Détails')} — ${inv}`;
       const infoEl = document.getElementById('invoices-modal-info');
       if(!rows.length){
         if(infoEl) infoEl.textContent = '';
@@ -1761,7 +1769,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
   async function showInvoicesModal(month, year){
     try{
-      invoicesModalTitle.textContent = `Factures — ${month}/${year}`;
+      invoicesModalTitle.textContent = `${_t('Factures')} — ${month}/${year}`;
       // reuse fetchInvoices (calls /api/factures/aa-detail)
       const all = await fetchInvoices();
       const filtered = (all||[]).filter(it=>{
@@ -1979,8 +1987,8 @@ document.addEventListener('DOMContentLoaded',function(){
             listMode='detail';
             currentListKey='generated';
             if(listBack) listBack.style.display='inline-flex';
-            const monthNames=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
-            listTitle.textContent=`Détails - ${currency} ${monthNames[monthIndex]||''} ${selYear}`;
+            const monthNames=_lang === 'en' ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] : ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+            listTitle.textContent=`${_t('Détails')} - ${currency} ${monthNames[monthIndex]||''} ${selYear}`;
             currentColumns=columnSets.freightCommercialDetails;
             renderColumns(currentColumns);
             currentItems=filtered.map(i=>({ ...i, marge:(Number(i.mont_vente)||0)-(Number(i.mont_achat)||0) }));
@@ -2081,7 +2089,7 @@ document.addEventListener('DOMContentLoaded',function(){
         };
       }
       if(listBack) listBack.style.display='inline-flex';
-      listTitle.textContent=`Détails - ${devise}`;
+      listTitle.textContent=`${_t('Détails')} - ${devise}`;
       currentColumns=columnSets.freightDetails;
       renderColumns(currentColumns);
       currentItems=items
@@ -2119,7 +2127,7 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       commercialFilter=commercial;
       if(listBack) listBack.style.display='inline-flex';
-      listTitle.textContent=`Dossiers - ${commercial}`;
+      listTitle.textContent=`${_t('Dossiers')} - ${commercial}`;
       currentColumns=columnSets.freightCommercialDetails;
       renderColumns(currentColumns);
       currentItems=items

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" data-bs-theme="light">
+<html lang="{{ current_lang }}" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -61,10 +61,32 @@
                             <div class="user-info">
                                 <div class="user-name fw-semibold">{{ current_user.username }}</div>
                                 <div class="user-role badge bg-primary bg-opacity-25 text-primary border-0">
-                                    {{ current_user.role.name if current_user.role else 'Sans role' }}
+                                    {{ current_user.role.name if current_user.role else t('Sans role') }}
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2"
+                           href="#"
+                           role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="fas fa-language"></i>
+                            <span>{{ current_lang|upper }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 p-2 mt-2">
+                            {% for lang_code, lang_label in supported_languages.items() %}
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center justify-content-between py-2 px-3 rounded-2 {% if current_lang == lang_code %}active{% endif %}"
+                                   href="{{ lang_url(lang_code) }}">
+                                    <span>{{ t('Français') if lang_code == 'fr' else t('Anglais') }}</span>
+                                    {% if current_lang == lang_code %}<i class="fas fa-check"></i>{% endif %}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
                     </div>
                     
                     <!-- Séparateur -->
@@ -81,7 +103,7 @@
                                  style="width: 36px; height: 36px;">
                                 <i class="fas fa-cog"></i>
                             </div>
-                            <span>Actions</span>
+                            <span>{{ t('Actions') }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 p-2 mt-2">
                             <li>
@@ -92,8 +114,8 @@
                                         <i class="fas fa-key text-primary"></i>
                                     </div>
                                     <div>
-                                        <div class="fw-semibold">Changer le mot de passe</div>
-                                        <small class="text-muted">Mettre à jour vos identifiants</small>
+                                        <div class="fw-semibold">{{ t('Changer le mot de passe') }}</div>
+                                        <small class="text-muted">{{ t('Mettre à jour vos identifiants') }}</small>
                                     </div>
                                 </a>
                             </li>
@@ -106,8 +128,8 @@
                                         <i class="fas fa-sign-out-alt text-danger"></i>
                                     </div>
                                     <div>
-                                        <div class="fw-semibold">Déconnexion</div>
-                                        <small class="text-muted">Quitter votre session</small>
+                                        <div class="fw-semibold">{{ t('Déconnexion') }}</div>
+                                        <small class="text-muted">{{ t('Quitter votre session') }}</small>
                                     </div>
                                 </a>
                             </li>
@@ -150,7 +172,7 @@
                                 <button type="button" 
                                         class="btn-close" 
                                         data-bs-dismiss="alert"
-                                        aria-label="Fermer"></button>
+                                        aria-label="{{ t('Fermer') }}"></button>
                             </div>
                         </div>
                     {% endfor %}
@@ -174,32 +196,48 @@
                                 height="18"
                                 class="rounded-1">
                         <div>
-                            <span class="text-muted fw-semibold">E-Trans Platform</span>
-                            <small class="d-block text-muted">© 2026 TransGlory Tunisie. Tous droits réservés.</small>
+                            <span class="text-muted fw-semibold">{{ t('E-Trans Platform') }}</span>
+                            <small class="d-block text-muted">© 2026 TransGlory Tunisie. {{ t('Tous droits réservés.') }}</small>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-6 text-md-end">
                     <div class="d-flex gap-3 justify-content-md-end">
                         <a href="#" class="text-decoration-none text-muted small">
-                            <i class="fas fa-shield-alt me-1"></i> Sécurité
+                            <i class="fas fa-shield-alt me-1"></i> {{ t('Sécurité') }}
                         </a>
                         <a href="#" class="text-decoration-none text-muted small">
-                            <i class="fas fa-question-circle me-1"></i> Aide
+                            <i class="fas fa-question-circle me-1"></i> {{ t('Aide') }}
                         </a>
                         <a href="#" class="text-decoration-none text-muted small">
-                            <i class="fas fa-envelope me-1"></i> Support
+                            <i class="fas fa-envelope me-1"></i> {{ t('Support') }}
                         </a>
                     </div>
-                    <small class="text-muted d-block mt-2">Version 1.0.0 • Dernière mise à jour: Aujourd'hui</small>
+                    <small class="text-muted d-block mt-2">{{ t("Version 1.0.0 • Dernière mise à jour: Aujourd'hui") }}</small>
                 </div>
             </div>
         </div>
     </footer>
     {% endif %}
 
+    {% if not current_user.is_authenticated %}
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1040;">
+        <div class="btn-group shadow-sm">
+            <a href="{{ lang_url('fr') }}" class="btn btn-sm {% if current_lang == 'fr' %}btn-primary{% else %}btn-outline-primary{% endif %}">FR</a>
+            <a href="{{ lang_url('en') }}" class="btn btn-sm {% if current_lang == 'en' %}btn-primary{% else %}btn-outline-primary{% endif %}">EN</a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        window.appI18n = {
+            lang: {{ current_lang|tojson }},
+            translations: {{ client_translations|tojson }}
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
     
     <!-- Scripts personnalisés -->
     <script>

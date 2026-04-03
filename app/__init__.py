@@ -1,10 +1,11 @@
 """Factory Flask — crée et configure l'application."""
 import os
 
-from flask import Flask, render_template
+from flask import Flask, render_template, request, url_for
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 
+from app.i18n import SUPPORTED_LANGUAGES, get_client_translations, get_current_language, t
 from config.settings import config
 
 db = SQLAlchemy()
@@ -26,6 +27,7 @@ def create_app(config_name: str | None = None) -> Flask:
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Veuillez vous connecter pour accéder à cette page."
+    login_manager.localize_callback = t
 
     # ------------------------------------------------------------------ #
     #  Jinja2 helpers globaux
@@ -34,12 +36,29 @@ def create_app(config_name: str | None = None) -> Flask:
     def inject_permissions():
         """Injecte has_perm() dans tous les templates Jinja2."""
         from flask_login import current_user as cu
+
         def has_perm(code: str) -> bool:
             if not cu or not cu.is_authenticated:
                 return False
             from app.services.permission_service import has_permission
             return has_permission(cu, code)
-        return dict(has_perm=has_perm)
+
+        def lang_url(lang_code: str) -> str:
+            if not request.endpoint:
+                return request.path
+            args = request.args.to_dict(flat=True)
+            args["lang"] = lang_code
+            return url_for(request.endpoint, **(request.view_args or {}), **args)
+
+        current_lang = get_current_language()
+        return dict(
+            has_perm=has_perm,
+            t=t,
+            current_lang=current_lang,
+            supported_languages=SUPPORTED_LANGUAGES,
+            lang_url=lang_url,
+            client_translations=get_client_translations(current_lang),
+        )
 
     # ------------------------------------------------------------------ #
     #  Blueprints                                                         #
