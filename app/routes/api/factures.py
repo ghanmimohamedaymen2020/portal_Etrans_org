@@ -9,13 +9,87 @@ except Exception:
 from flask_login import login_required, current_user
 from app import db
 from app.routes.api import api_bp
+from app.services.permission_service import has_permission
 from sqlalchemy import text
 from datetime import datetime
+
+
+def _require_permission(code: str):
+    if has_permission(current_user, code):
+        return None
+    return jsonify({'message': 'Accès refusé', 'permission': code}), 403
+
+
+def _allowed_ff_types_for_current_user():
+    allowed = []
+    mapping = {
+        'T': 'detail.timbrage',
+        'A': 'detail.agent',
+        'M': 'detail.magasinage',
+        'S': 'detail.surestaries',
+    }
+    for invoice_type, perm_code in mapping.items():
+        if has_permission(current_user, perm_code):
+            allowed.append(invoice_type)
+    return allowed
+
+
+def _append_allowed_types_filter(where_clauses, params, entete_set, allowed_types):
+    type_col = None
+    if 'FF_H_TypeFacture' in entete_set:
+        type_col = 'e.FF_H_TypeFacture'
+    elif 'FF_H_TypeFactRect' in entete_set:
+        type_col = 'e.FF_H_TypeFactRect'
+
+    if not type_col:
+        return False
+
+    placeholders = []
+    for i, t in enumerate(allowed_types):
+        key = f"allowed_type_{i}"
+        placeholders.append(f":{key}")
+        params[key] = t
+
+    where_clauses.append(f"UPPER(LTRIM(RTRIM({type_col}))) IN ({', '.join(placeholders)})")
+    return True
+
+
+def _require_ff_detail_permission():
+    requested_type = (request.args.get('type') or '').strip().upper()
+    type_perm_map = {
+        'T': 'detail.timbrage',
+        'A': 'detail.agent',
+        'M': 'detail.magasinage',
+        'S': 'detail.surestaries',
+    }
+
+    if requested_type:
+        required = type_perm_map.get(requested_type, 'detail.factures_ff')
+        if has_permission(current_user, required):
+            return None
+        return jsonify({'message': 'Accès refusé', 'permission': required}), 403
+
+    # Global FF detail page access (no type): requires parent permission
+    if not has_permission(current_user, 'detail.factures_ff'):
+        return jsonify({'message': 'Accès refusé', 'permission': 'detail.factures_ff'}), 403
+
+    # And at least one authorized detail subtype, otherwise the global page has no allowed content.
+    if not _allowed_ff_types_for_current_user():
+        return jsonify({
+            'message': 'Accès refusé',
+            'required_any': ['detail.timbrage', 'detail.agent', 'detail.magasinage', 'detail.surestaries']
+        }), 403
+
+    return None
 
 @api_bp.route('/factures/aa-detail', methods=['GET'])
 @login_required
 def get_factures_aa_detail():
     """Récupérer les factures depuis View_AA_AvecFacture"""
+    perm_error = _require_permission('detail.factures_aa')
+    if perm_error:
+        return perm_error
+
     limit = request.args.get('limit', 0, type=int)
     limit = max(0, min(limit, 100000))
     top_clause = f"TOP {limit}" if limit > 0 else ""
@@ -101,6 +175,10 @@ def get_aa_totals():
     Tries multiple strategies: direct sums from View_AA_Total, or joining
     View_AA_SansFacture to View_AA_Total. Returns totals and computed HT.
     """
+    perm_error = _require_permission('card.avis_non_timbres')
+    if perm_error:
+        return perm_error
+
     try:
         # Preferred calculation: aggregate per AA (avoid duplicates when View_AA_Total has multiple rows per AA)
         sql = text("""
@@ -237,6 +315,10 @@ def get_aa_totals():
 @login_required
 def get_aa_details_by_reference():
     """Return detail rows from View_AA_Detail for a given AA reference."""
+    perm_error = _require_permission('detail.factures_aa')
+    if perm_error:
+        return perm_error
+
     ref = request.args.get('reference')
     if not ref:
         return jsonify({'details': [], 'error': 'Missing reference parameter'}), 400
@@ -1163,6 +1245,10 @@ def get_details_by_invoices():
 @login_required
 def get_ff_list():
     """Return rows from View_FF_Entete for a given month/year with FF totals when available."""
+    perm_error = _require_ff_detail_permission()
+    if perm_error:
+        return perm_error
+
     month = request.args.get('month', type=int)
     year = request.args.get('year', type=int)
     if month is None or year is None:
@@ -1363,10 +1449,15 @@ def get_ff_list():
             ]
         else:
             # default behavior: return entete-based rows (existing behavior)
-            type_filter_sql = ''
-            if request.args.get('type'):
-                type_filter_sql = " AND UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) = :type"
-            sql_text = f"SELECT {', '.join(select_parts)} FROM [dbo].[View_FF_Entete] e LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact WHERE MONTH(e.FF_H_DateProcess) = :month AND YEAR(e.FF_H_DateProcess) = :year {type_filter_sql} ORDER BY e.FF_H_DateProcess DESC"
+            where_clauses = ["MONTH(e.FF_H_DateProcess) = :month", "YEAR(e.FF_H_DateProcess) = :year"]
+
+            # In global mode (no explicit type), only return invoice types authorized by detail.* permissions.
+            allowed_types = _allowed_ff_types_for_current_user()
+            if not _append_allowed_types_filter(where_clauses, params, entete_set, allowed_types):
+                return jsonify({'message': 'Configuration invalide: colonne type facture introuvable'}), 403
+
+            where_sql = ' AND '.join(where_clauses)
+            sql_text = f"SELECT {', '.join(select_parts)} FROM [dbo].[View_FF_Entete] e LEFT JOIN [dbo].[View_FF_Total] t ON t.FF_T_NumFact = e.FF_H_NumFact WHERE {where_sql} ORDER BY e.FF_H_DateProcess DESC"
             sql = text(sql_text)
             rows = db.session.execute(sql, params).mappings().all()
             factures = [dict(row) for row in rows]
@@ -1556,6 +1647,10 @@ def get_ff_list():
 @login_required
 def export_ff_list_csv():
     """Export FF list for a month/year as CSV."""
+    perm_error = _require_ff_detail_permission()
+    if perm_error:
+        return perm_error
+
     month = request.args.get('month', type=int)
     year = request.args.get('year', type=int)
     if month is None or year is None:
@@ -1658,6 +1753,10 @@ def export_ff_list_csv():
                 where_clauses.append("UPPER(LTRIM(RTRIM(e.FF_H_TypeFactRect))) = :type")
             # set param uppercased
             params['type'] = str(req_type).upper()
+        else:
+            allowed_types = _allowed_ff_types_for_current_user()
+            if not _append_allowed_types_filter(where_clauses, params, entete_set, allowed_types):
+                return jsonify({'message': 'Configuration invalide: colonne type facture introuvable'}), 403
 
         where_sql = ' AND '.join(where_clauses)
         sql = text(f"""
@@ -1730,6 +1829,10 @@ def export_ff_list_csv():
 @login_required
 def export_ff_list_xlsx():
     """Export FF list as XLSX (reuses CSV logic then converts to Excel)."""
+    perm_error = _require_ff_detail_permission()
+    if perm_error:
+        return perm_error
+
     if Workbook is None:
         return jsonify({'error': 'openpyxl is not installed on the server'}), 500
     try:

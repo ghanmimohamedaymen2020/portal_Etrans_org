@@ -287,6 +287,7 @@ document.addEventListener('DOMContentLoaded',function(){
   };
 
   const listCache={};
+  let monthlyTurnoverPromise = null;
 
   function renderColumns(columns){
     listHeaderRow.innerHTML='';
@@ -1445,109 +1446,122 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   async function loadMonthlyTurnover(){
-    try{
-      const curYear = new Date().getFullYear();
-      const resp = await fetch(`/api/factures/annual-summary?year=${curYear}`);
-      const data = await resp.json();
-      if(!resp.ok) throw new Error(data.error || 'Erreur API annual-summary');
-
-      const rows = data.rows || [];
-      const timbrage = new Array(12).fill(0);
-      const magasinage = new Array(12).fill(0);
-      const surestarie = new Array(12).fill(0);
-      const agent_by_currency = {}; // currency -> array[12]
-      const annual_totals = {}; // type -> { cur -> total }
-
-      rows.forEach(r=>{
-        const type = (r.type_facture||'').toString().trim();
-        const mois = Number(r.mois||0);
-        const devise = (r.devise||'TND').toString();
-        const total = Number(r.total||0);
-        if(mois === 0){
-          if(!annual_totals[type]) annual_totals[type] = {};
-          annual_totals[type][devise] = (annual_totals[type][devise]||0) + total;
-        } else {
-          if(type === 'A'){
-            if(!agent_by_currency[devise]) agent_by_currency[devise] = new Array(12).fill(0);
-            agent_by_currency[devise][mois-1] += total;
-          } else if(type === 'T'){
-            timbrage[mois-1] += total;
-          } else if(type === 'M'){
-            magasinage[mois-1] += total;
-          } else if(type === 'S'){
-            surestarie[mois-1] += total;
-          }
-        }
-      });
-
-      datasets.timbrage.data = timbrage;
-      datasets.magasinage.data = magasinage;
-      datasets.surestarie.data = surestarie;
-
-      // Build agent currency datasets
-      datasets.agent_currencies = [];
-      const paletteLocal = ['#f39c12','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71','#34495e'];
-      let pi = 0;
-      Object.keys(agent_by_currency).forEach(cur=>{
-        datasets.agent_currencies.push({
-          label: `Agent - ${cur}`,
-          data: agent_by_currency[cur].slice(0,12),
-          backgroundColor: paletteLocal[(pi++)%paletteLocal.length]
-        });
-      });
-
-      // compute current-month totals for KPI cards (use monthly series, not annual)
-      const sum = arr => Array.isArray(arr)? arr.reduce((a,b)=>a+Number(b||0),0):0;
-      const curMonthIndex = new Date().getMonth(); // 0-based
-      const magCurrent = Number(magasinage[curMonthIndex]||0);
-      const surCurrent = Number(surestarie[curMonthIndex]||0);
-      const timbrageCurrent = Number(timbrage[curMonthIndex]||0);
-
-      // Agent totals per currency for current month
-      const agentTotals = {};
-      if(Object.keys(agent_by_currency).length){
-        Object.keys(agent_by_currency).forEach(cur=>{ agentTotals[cur] = Number(agent_by_currency[cur][curMonthIndex]||0); });
-      } else if(annual_totals['A']){
-        // fallback: if only annual totals available, approximate by dividing by 12
-        Object.entries(annual_totals['A']).forEach(([cur,v])=>{ agentTotals[cur]=Number((v||0)/12); });
-      }
-
-      // update KPI DOM with current month values
-      setKpiValue('invoices-magasinage', formatAmount(magCurrent) + ' TND');
-      setKpiValue('invoices-magasinage-tht-month', formatAmount(magCurrent) + ' TND');
-      setKpiValue('invoices-magasinage-tht-year', formatAmount(magCurrent) + ' TND');
-
-      setKpiValue('invoices-surestarie', formatAmount(surCurrent) + ' TND');
-      setKpiValue('invoices-surestarie-tht-month', formatAmount(surCurrent) + ' TND');
-      setKpiValue('invoices-surestarie-tht-year', formatAmount(surCurrent) + ' TND');
-
-      // set Timbrage invoice KPI (main invoices card) to current month timbrage
-      setKpiValue('invoices', formatAmount(timbrageCurrent) + ' TND');
-
-      // agent small KPI elements (EUR/USD) if present — show current month
-      const eurEl = document.querySelector('[data-kpi-value="agent-eur"]');
-      const usdEl = document.querySelector('[data-kpi-value="agent-usd"]');
-      if(eurEl) eurEl.textContent = formatAmount(agentTotals['EUR']||0) + ' EUR';
-      if(usdEl) usdEl.textContent = formatAmount(agentTotals['USD']||0) + ' USD';
-
-      // compute totals dataset (sum of TND categories only)
-      const totals = new Array(12).fill(0);
-      for(let i=0;i<12;i++){
-        totals[i] = Number(timbrage[i]||0) + Number(magasinage[i]||0) + Number(surestarie[i]||0);
-      }
-      datasets.total.data = totals;
-
-      // Marquer les données mensuelles comme chargées pour éviter un 2e fetch inutile.
-      window.monthlyActivityCache = {
-        loaded: true,
-        year: curYear,
-        at: Date.now(),
-      };
-
-      applyCAMode(document.getElementById('ca-mode-select')?.value || 'total');
-    }catch(e){
-      console.error('Erreur chargement CA mensuel:', e);
+    const curYear = new Date().getFullYear();
+    if(window.monthlyActivityCache && window.monthlyActivityCache.loaded && window.monthlyActivityCache.year === curYear){
+      return;
     }
+    if(monthlyTurnoverPromise){
+      return monthlyTurnoverPromise;
+    }
+
+    monthlyTurnoverPromise = (async () => {
+      try{
+        const resp = await fetch(`/api/factures/annual-summary?year=${curYear}`);
+        const data = await resp.json();
+        if(!resp.ok) throw new Error(data.error || 'Erreur API annual-summary');
+
+        const rows = data.rows || [];
+        const timbrage = new Array(12).fill(0);
+        const magasinage = new Array(12).fill(0);
+        const surestarie = new Array(12).fill(0);
+        const agent_by_currency = {}; // currency -> array[12]
+        const annual_totals = {}; // type -> { cur -> total }
+
+        rows.forEach(r=>{
+          const type = (r.type_facture||'').toString().trim();
+          const mois = Number(r.mois||0);
+          const devise = (r.devise||'TND').toString();
+          const total = Number(r.total||0);
+          if(mois === 0){
+            if(!annual_totals[type]) annual_totals[type] = {};
+            annual_totals[type][devise] = (annual_totals[type][devise]||0) + total;
+          } else {
+            if(type === 'A'){
+              if(!agent_by_currency[devise]) agent_by_currency[devise] = new Array(12).fill(0);
+              agent_by_currency[devise][mois-1] += total;
+            } else if(type === 'T'){
+              timbrage[mois-1] += total;
+            } else if(type === 'M'){
+              magasinage[mois-1] += total;
+            } else if(type === 'S'){
+              surestarie[mois-1] += total;
+            }
+          }
+        });
+
+        datasets.timbrage.data = timbrage;
+        datasets.magasinage.data = magasinage;
+        datasets.surestarie.data = surestarie;
+
+        // Build agent currency datasets
+        datasets.agent_currencies = [];
+        const paletteLocal = ['#f39c12','#9b59b6','#1abc9c','#e67e22','#3498db','#2ecc71','#34495e'];
+        let pi = 0;
+        Object.keys(agent_by_currency).forEach(cur=>{
+          datasets.agent_currencies.push({
+            label: `Agent - ${cur}`,
+            data: agent_by_currency[cur].slice(0,12),
+            backgroundColor: paletteLocal[(pi++)%paletteLocal.length]
+          });
+        });
+
+        // compute current-month totals for KPI cards (use monthly series, not annual)
+        const sum = arr => Array.isArray(arr)? arr.reduce((a,b)=>a+Number(b||0),0):0;
+        const curMonthIndex = new Date().getMonth(); // 0-based
+        const magCurrent = Number(magasinage[curMonthIndex]||0);
+        const surCurrent = Number(surestarie[curMonthIndex]||0);
+        const timbrageCurrent = Number(timbrage[curMonthIndex]||0);
+
+        // Agent totals per currency for current month
+        const agentTotals = {};
+        if(Object.keys(agent_by_currency).length){
+          Object.keys(agent_by_currency).forEach(cur=>{ agentTotals[cur] = Number(agent_by_currency[cur][curMonthIndex]||0); });
+        } else if(annual_totals['A']){
+          // fallback: if only annual totals available, approximate by dividing by 12
+          Object.entries(annual_totals['A']).forEach(([cur,v])=>{ agentTotals[cur]=Number((v||0)/12); });
+        }
+
+        // update KPI DOM with current month values
+        setKpiValue('invoices-magasinage', formatAmount(magCurrent) + ' TND');
+        setKpiValue('invoices-magasinage-tht-month', formatAmount(magCurrent) + ' TND');
+        setKpiValue('invoices-magasinage-tht-year', formatAmount(magCurrent) + ' TND');
+
+        setKpiValue('invoices-surestarie', formatAmount(surCurrent) + ' TND');
+        setKpiValue('invoices-surestarie-tht-month', formatAmount(surCurrent) + ' TND');
+        setKpiValue('invoices-surestarie-tht-year', formatAmount(surCurrent) + ' TND');
+
+        // set Timbrage invoice KPI (main invoices card) to current month timbrage
+        setKpiValue('invoices', formatAmount(timbrageCurrent) + ' TND');
+
+        // agent small KPI elements (EUR/USD) if present — show current month
+        const eurEl = document.querySelector('[data-kpi-value="agent-eur"]');
+        const usdEl = document.querySelector('[data-kpi-value="agent-usd"]');
+        if(eurEl) eurEl.textContent = formatAmount(agentTotals['EUR']||0) + ' EUR';
+        if(usdEl) usdEl.textContent = formatAmount(agentTotals['USD']||0) + ' USD';
+
+        // compute totals dataset (sum of TND categories only)
+        const totals = new Array(12).fill(0);
+        for(let i=0;i<12;i++){
+          totals[i] = Number(timbrage[i]||0) + Number(magasinage[i]||0) + Number(surestarie[i]||0);
+        }
+        datasets.total.data = totals;
+
+        // Marquer les données mensuelles comme chargées pour éviter un 2e fetch inutile.
+        window.monthlyActivityCache = {
+          loaded: true,
+          year: curYear,
+          at: Date.now(),
+        };
+
+        applyCAMode(document.getElementById('ca-mode-select')?.value || 'total');
+      }catch(e){
+        console.error('Erreur chargement CA mensuel:', e);
+      } finally {
+        monthlyTurnoverPromise = null;
+      }
+    })();
+
+    return monthlyTurnoverPromise;
   }
 
   // trigger the (now-stubbed) loader to initialize empty chart state

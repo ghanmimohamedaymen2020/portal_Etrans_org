@@ -9,13 +9,25 @@ except Exception:
 from flask_login import login_required, current_user
 from app import db
 from app.routes.api import api_bp
+from app.services.permission_service import has_permission
 from sqlalchemy import text
 from datetime import datetime
+
+
+def _require_any_permission(codes):
+    for code in codes:
+        if has_permission(current_user, code):
+            return None
+    return jsonify({'message': 'Accès refusé', 'required_any': list(codes)}), 403
 
 @api_bp.route('/freight/by-devise', methods=['GET'])
 @login_required
 def get_freight_by_devise():
     """Total marge sur fret par devise depuis View_FREIGHT."""
+    perm_error = _require_any_permission(('chart.freight_devise', 'detail.freight', 'card.freight'))
+    if perm_error:
+        return perm_error
+
     required_cols = {'Devise', 'MontAchat', 'MontVente'}
 
 
@@ -25,6 +37,18 @@ def get_factures_annual_summary():
     """Return annual/monthly totals by invoice type and currency using the provided SQL logic.
     Query param: `year` (optional, defaults to current year).
     """
+    perm_error = _require_any_permission((
+        'chart.ca_mensuel',
+        'chart.ca_activite',
+        'detail.factures_ff',
+        'detail.timbrage',
+        'detail.agent',
+        'detail.magasinage',
+        'detail.surestaries',
+    ))
+    if perm_error:
+        return perm_error
+
     year = request.args.get('year', type=int)
     if not year:
         from datetime import datetime
@@ -108,6 +132,18 @@ def get_factures_dashboard_summary():
     `/factures/annual-summary` (the SQL-based implementation).
     Query params: `year` (optional), `proc` (optional override, e.g. dbo.MyProc)
     """
+    perm_error = _require_any_permission((
+        'chart.ca_mensuel',
+        'chart.ca_activite',
+        'detail.factures_ff',
+        'detail.timbrage',
+        'detail.agent',
+        'detail.magasinage',
+        'detail.surestaries',
+    ))
+    if perm_error:
+        return perm_error
+
     year = request.args.get('year', type=int)
     if not year:
         from datetime import datetime
