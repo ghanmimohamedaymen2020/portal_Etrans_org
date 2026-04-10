@@ -100,12 +100,12 @@
     <span class="badge bg-primary mt-2">Administration</span>
   </a>
   
-  <a href="#" class="action-card">
+  <a href="{{ url_for('dashboard.system_logs_page') }}" class="action-card" id="system-logs-card">
     <div class="action-icon">
       <i class="fas fa-clipboard-list"></i>
     </div>
     <h4 class="action-title">Logs Système</h4>
-    <p class="action-desc">Historique complet des activités</p>
+    <p class="action-desc">Voir les détails complets des événements et erreurs</p>
     <span class="badge bg-warning mt-2">Audit</span>
   </a>
   

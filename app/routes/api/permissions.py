@@ -14,6 +14,7 @@ from app.services.permission_service import (
     get_permissions_by_category,
     ALL_PERMISSIONS,
 )
+from app.utils.audit import log_user_event
 
 
 def _admin_required():
@@ -22,6 +23,16 @@ def _admin_required():
     if current_user.role.name != "Admin":
         return jsonify({"message": "Accès réservé aux administrateurs"}), 403
     return None
+
+
+def _log_admin_event(event_type: str, status: str = "SUCCESS", details: dict | None = None) -> None:
+    log_user_event(
+        event_type=event_type,
+        actor_username=current_user.username if current_user.is_authenticated else "anonymous",
+        actor_role=(current_user.role.name if current_user.is_authenticated and current_user.role else "guest"),
+        status=status,
+        details=details or {},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,8 +91,10 @@ def create_role():
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
     if not name:
+        _log_admin_event("create_role", "FAILED", {"reason": "missing_name"})
         return jsonify({"message": "Le nom du rôle est requis"}), 400
     if Role.query.filter_by(name=name).first():
+        _log_admin_event("create_role", "FAILED", {"reason": "duplicate_role", "role": name})
         return jsonify({"message": f"Le rôle '{name}' existe déjà"}), 409
 
     role = Role(
@@ -96,6 +109,7 @@ def create_role():
     set_role_permissions(role.id, permission_codes)
 
     db.session.commit()
+    _log_admin_event("create_role", "SUCCESS", {"role": role.name, "permissions_count": len(permission_codes)})
     return jsonify({"message": "Rôle créé", "id": role.id, "name": role.name}), 201
 
 
@@ -109,6 +123,7 @@ def update_role(role_id: int):
 
     role = Role.query.get_or_404(role_id)
     if role.is_system:
+        _log_admin_event("update_role", "FAILED", {"reason": "system_role", "role_id": role_id})
         return jsonify({"message": "Ce rôle système ne peut pas être modifié"}), 403
 
     data = request.get_json() or {}
@@ -116,6 +131,7 @@ def update_role(role_id: int):
         new_name = data["name"].strip()
         existing = Role.query.filter(Role.name == new_name, Role.id != role_id).first()
         if existing:
+            _log_admin_event("update_role", "FAILED", {"reason": "duplicate_role", "role_id": role_id, "name": new_name})
             return jsonify({"message": f"Le rôle '{new_name}' existe déjà"}), 409
         role.name = new_name
         role.nom  = new_name
@@ -126,6 +142,7 @@ def update_role(role_id: int):
         set_role_permissions(role.id, data["permissions"])
 
     db.session.commit()
+    _log_admin_event("update_role", "SUCCESS", {"role_id": role_id, "role": role.name})
     return jsonify({"message": "Rôle mis à jour"})
 
 
@@ -139,14 +156,18 @@ def delete_role(role_id: int):
 
     role = Role.query.get_or_404(role_id)
     if role.is_system:
+        _log_admin_event("delete_role", "FAILED", {"reason": "system_role", "role_id": role_id})
         return jsonify({"message": "Ce rôle système ne peut pas être supprimé"}), 403
     if role.users:
+        _log_admin_event("delete_role", "FAILED", {"reason": "role_in_use", "role_id": role_id, "users": len(role.users)})
         return jsonify({
             "message": f"Ce rôle est assigné à {len(role.users)} utilisateur(s). Réassignez-les d'abord."
         }), 409
 
+    role_name = role.name
     db.session.delete(role)
     db.session.commit()
+    _log_admin_event("delete_role", "SUCCESS", {"role_id": role_id, "role": role_name})
     return jsonify({"message": "Rôle supprimé"})
 
 
@@ -160,11 +181,13 @@ def set_role_perms(role_id: int):
 
     role = Role.query.get_or_404(role_id)
     if role.is_system:
+        _log_admin_event("set_role_permissions", "FAILED", {"reason": "system_role", "role_id": role_id})
         return jsonify({"message": "Rôle Admin : toutes les permissions sont accordées automatiquement"}), 403
 
     data = request.get_json() or {}
     codes = data.get("permissions", [])
     set_role_permissions(role_id, codes)
+    _log_admin_event("set_role_permissions", "SUCCESS", {"role_id": role_id, "permissions_count": len(codes)})
     return jsonify({"message": "Permissions du rôle mises à jour", "permissions": codes})
 
 
@@ -228,6 +251,7 @@ def update_user_perms(user_id: int):
 
     user = User.query.get_or_404(user_id)
     if user.role.name == "Admin":
+        _log_admin_event("set_user_permissions", "FAILED", {"reason": "target_is_admin", "target_user_id": user_id})
         return jsonify({"message": "L'Admin a toutes les permissions automatiquement"}), 403
 
     data = request.get_json() or {}
@@ -236,6 +260,7 @@ def update_user_perms(user_id: int):
         # Supprimer tous les overrides
         UserPermission.query.filter_by(user_id=user_id).delete()
         db.session.commit()
+        _log_admin_event("set_user_permissions", "SUCCESS", {"target_user_id": user_id, "action": "reset"})
         return jsonify({"message": "Overrides réinitialisés"})
 
     overrides = data.get("overrides", [])
@@ -255,6 +280,15 @@ def update_user_perms(user_id: int):
             ))
 
     db.session.commit()
+    _log_admin_event(
+        "set_user_permissions",
+        "SUCCESS",
+        {
+            "target_user_id": user_id,
+            "target_username": user.username,
+            "overrides_count": len(overrides),
+        },
+    )
     return jsonify({"message": "Overrides mis à jour", "count": len(overrides)})
 
 @api_bp.route("/users", methods=["GET"])

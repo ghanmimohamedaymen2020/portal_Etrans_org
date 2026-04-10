@@ -185,6 +185,7 @@ document.addEventListener('DOMContentLoaded', function() {
             subEl.innerHTML = `<i class="fas fa-history"></i> ${formatters.number.format(active30)} actifs (30j)`;
           }
         } catch (e) { console.error('Erreur mise à jour sous-texte active-users', e); }
+
     }
     
     // Valeurs par défaut en cas d'erreur
@@ -204,6 +205,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (lastUpdateEl) {
             lastUpdateEl.textContent = formatters.date.format(new Date());
         }
+
     }
     
     // Graphique d'activité

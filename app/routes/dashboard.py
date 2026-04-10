@@ -2,6 +2,7 @@
 from flask import Blueprint, current_app, redirect, render_template, url_for
 from flask_login import current_user, login_required
 from app.services.permission_service import has_permission
+from app.utils.system_logs import get_system_logs_page_data
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -52,3 +53,19 @@ def excel_module_page():
     if not has_permission(current_user, "excel.view"):
         return redirect(url_for("dashboard.index"))
     return render_template("dashboard/excel_module.html")
+
+
+@dashboard_bp.route("/system-logs")
+@login_required
+def system_logs_page():
+    """Page détaillée des événements utilisateur/admin et erreurs système."""
+    if not getattr(current_user, "role", None) or current_user.role.name != "Admin":
+        return redirect(url_for("dashboard.index"))
+
+    payload = get_system_logs_page_data(audit_limit=250, system_limit=200)
+    return render_template(
+        "dashboard/system_logs.html",
+        summary=payload["summary"],
+        audit_events=payload["audit_events"],
+        system_events=payload["system_events"],
+    )

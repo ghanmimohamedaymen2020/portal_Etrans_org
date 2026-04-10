@@ -815,6 +815,16 @@ document.addEventListener('DOMContentLoaded',function(){
         if(excelRoutingTitleEl){
           excelRoutingTitleEl.textContent = `GESTION DES ROUTING TGY TUNISIE (${curYear})`;
         }
+        // Charger rapidement ce KPI en parallèle (ne pas attendre toute la chaîne d'API).
+        fetch('/api/excel-module/records?page=1&per_page=1', { credentials: 'include' })
+          .then((resp) => resp.ok ? resp.json() : null)
+          .then((excelJson) => {
+            const totalLines = Number(excelJson?.total) || 0;
+            setKpiValue('excel-routing-lines', totalLines.toLocaleString('fr-FR'));
+          })
+          .catch(() => {
+            setKpiValue('excel-routing-lines', '0');
+          });
         // Replace any title markers '(mois)' with the current month name and year
         try{
           const monthNamesFull = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -880,75 +890,52 @@ document.addEventListener('DOMContentLoaded',function(){
           const agentMainVal = document.querySelector('[data-kpi-value="invoices-agent"]');
           if(agentMainVal) agentMainVal.textContent = '';
         }catch(e){ /* ignore */ }
-        // Récupérer totaux Agent par devise (EUR, USD) et afficher
-        try{
-          const atResp = await fetch(`/api/factures/agent-totals?month=${curMonth}&year=${curYear}`);
-          if(atResp.ok){
-            const atJson = await atResp.json();
+        // KPI indépendants: charger en parallèle pour accélérer l'affichage global.
+        fetch(`/api/factures/agent-totals?month=${curMonth}&year=${curYear}`)
+          .then((resp) => (resp.ok ? resp.json() : null))
+          .then((atJson) => {
+            if (!atJson) return;
             const totals = atJson.totals || {};
             const eur = Number(totals.EUR || 0);
             const usd = Number(totals.USD || 0);
             const eurEl = document.querySelector('[data-kpi-value="agent-eur"]');
             const usdEl = document.querySelector('[data-kpi-value="agent-usd"]');
-            if(eurEl) eurEl.textContent = formatAmount(eur) + ' EUR';
-            if(usdEl) usdEl.textContent = formatAmount(usd) + ' USD';
-          }
-        }catch(e){
-          // ignore
-        }
-        
-        // MAGASINAGE KPI — fetch totals and display
-        try {
-          const mResp = await fetch(`/api/factures/magasinage-totals?year=${curYear}&month=${curMonth}`, { credentials: 'include' });
-          if (mResp.ok) {
-            const mJson = await mResp.json();
+            if (eurEl) eurEl.textContent = formatAmount(eur) + ' EUR';
+            if (usdEl) usdEl.textContent = formatAmount(usd) + ' USD';
+          })
+          .catch(() => {});
+
+        fetch(`/api/factures/magasinage-totals?year=${curYear}&month=${curMonth}`, { credentials: 'include' })
+          .then((resp) => (resp.ok ? resp.json() : null))
+          .then((mJson) => {
+            if (!mJson) return;
             setKpiValue('invoices-magasinage', formatAmount(mJson.total_ttc || 0) + ' TND');
             setKpiValue('invoices-magasinage-tht-month', formatAmount(mJson.total_ht || 0) + ' TND');
             setKpiValue('invoices-magasinage-tht-year', formatAmount(mJson.total_year_ht || 0) + ' TND');
-          }
-        } catch(e) { console.error('Error fetching magasinage KPI', e); }
-        
-        // SURESTARIE KPI — fetch totals and display
-        try {
-          const sResp = await fetch(`/api/factures/surestarie-totals?year=${curYear}&month=${curMonth}`, { credentials: 'include' });
-          if (sResp.ok) {
-            const sJson = await sResp.json();
+          })
+          .catch((e) => console.error('Error fetching magasinage KPI', e));
+
+        fetch(`/api/factures/surestarie-totals?year=${curYear}&month=${curMonth}`, { credentials: 'include' })
+          .then((resp) => (resp.ok ? resp.json() : null))
+          .then((sJson) => {
+            if (!sJson) return;
             setKpiValue('invoices-surestarie', formatAmount(sJson.total_ttc || 0) + ' TND');
             setKpiValue('invoices-surestarie-tht-month', formatAmount(sJson.total_ht || 0) + ' TND');
             setKpiValue('invoices-surestarie-tht-year', formatAmount(sJson.total_year_ht || 0) + ' TND');
-          }
-        } catch(e) { console.error('Error fetching surestarie KPI', e); }
-        
-        // ============================================
-        // FREIGHT - Totaux mensuel et annuel
-        // ============================================
-        try{
-          const now = new Date();
-          const curYear = now.getFullYear();
-          const freightResp = await fetch(`/api/freight/summary?year=${curYear}`);
-          if(freightResp.ok){
-            const freightJson = await freightResp.json();
+          })
+          .catch((e) => console.error('Error fetching surestarie KPI', e));
+
+        fetch(`/api/freight/summary?year=${curYear}`)
+          .then((resp) => (resp.ok ? resp.json() : null))
+          .then((freightJson) => {
+            if (!freightJson) return;
             const total_du_mois = Number(freightJson.total_du_mois) || 0;
             const total_year = Number(freightJson.total_year) || 0;
-            // show both values: month on main KPI, year in the small line below
             setKpiValue('generated', formatAmount(total_du_mois) + ' TND');
             const yearEl = document.querySelector('[data-kpi-value="generated-year"]');
-            if(yearEl) yearEl.textContent = formatAmount(total_year) + ' TND';
-          }
-        } catch(e) { 
-            console.error('Erreur chargement Freight:', e);
-          }
-
-        try {
-          const excelResp = await fetch('/api/excel-module/records?page=1&per_page=1', { credentials: 'include' });
-          if (excelResp.ok) {
-            const excelJson = await excelResp.json();
-            const totalLines = Number(excelJson.total) || 0;
-            setKpiValue('excel-routing-lines', totalLines.toLocaleString('fr-FR'));
-          }
-        } catch (e) {
-          setKpiValue('excel-routing-lines', '0');
-        }
+            if (yearEl) yearEl.textContent = formatAmount(total_year) + ' TND';
+          })
+          .catch((e) => console.error('Erreur chargement Freight:', e));
 
         // Monthly activity reporting removed by user request — use empty cache
         window.monthlyActivityCache = {};
@@ -1177,6 +1164,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
   // Apply chart mode: 'total' | 'timbrage' | 'magasinage' | 'agent' | 'surestarie' | 'detail'
   function applyCAMode(mode){
+    if(!barChart) return;
     const sel = mode || (document.getElementById('ca-mode-select') && document.getElementById('ca-mode-select').value) || 'total';
     let newDatasets = [];
     if(sel === 'detail'){
@@ -1255,7 +1243,9 @@ document.addEventListener('DOMContentLoaded',function(){
     loadDeviseChart();
   }
 
-  initKpiCounts();
+  if(!listOnlyParam){
+    initKpiCounts();
+  }
 
   if(listSearch){
     listSearch.addEventListener('input',function(){
@@ -1351,7 +1341,8 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  const barCtx=document.getElementById('barChart').getContext('2d');
+  const barCanvas=document.getElementById('barChart');
+  let barChart = null;
   const barLabels=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
   const barData=new Array(12).fill(0);
   // datasets: total + activities
@@ -1365,19 +1356,21 @@ document.addEventListener('DOMContentLoaded',function(){
 
   // Note: use global `window.monthlyActivityCache` populated earlier
 
-  const barChart=new Chart(barCtx,{
-    type:'bar',
-    data:{
-      labels:barLabels,
-      datasets:[
-        // default show total
-        Object.assign({type:'bar', borderWidth:1}, datasets.total)
-      ]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      onClick:function(evt,elements){
+  if(barCanvas){
+    const barCtx=barCanvas.getContext('2d');
+    barChart=new Chart(barCtx,{
+      type:'bar',
+      data:{
+        labels:barLabels,
+        datasets:[
+          // default show total
+          Object.assign({type:'bar', borderWidth:1}, datasets.total)
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        onClick:function(evt,elements){
         if(!elements.length) return;
         // Only open invoice list when mode is 'total' or 'detail'
         const mode = document.getElementById('ca-mode-select')?.value || 'total';
@@ -1418,16 +1411,16 @@ document.addEventListener('DOMContentLoaded',function(){
         if(currency) opts.currency = currency;
         renderList('invoices', opts);
         if(listSearch) listSearch.value='';
-      },
-      scales:{
+        },
+        scales:{
         y:{
           beginAtZero:true,
           grid:{color:'rgba(0,0,0,0.05)'},
           stacked:false
         },
         x:{grid:{color:'rgba(0,0,0,0.05)'}, stacked:false}
-      },
-      plugins:{
+        },
+        plugins:{
         legend:{display:true},
         tooltip:{
           callbacks:{
@@ -1446,9 +1439,10 @@ document.addEventListener('DOMContentLoaded',function(){
             }
           }
         }
+        }
       }
-    }
-  });
+    });
+  }
 
   async function loadMonthlyTurnover(){
     try{
@@ -1543,6 +1537,13 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       datasets.total.data = totals;
 
+      // Marquer les données mensuelles comme chargées pour éviter un 2e fetch inutile.
+      window.monthlyActivityCache = {
+        loaded: true,
+        year: curYear,
+        at: Date.now(),
+      };
+
       applyCAMode(document.getElementById('ca-mode-select')?.value || 'total');
     }catch(e){
       console.error('Erreur chargement CA mensuel:', e);
@@ -1550,7 +1551,9 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   // trigger the (now-stubbed) loader to initialize empty chart state
-  loadMonthlyTurnover();
+  if(barChart){
+    loadMonthlyTurnover();
+  }
 
   // Invoices modal logic
   const invoicesModal = document.getElementById('invoices-modal');
@@ -1801,41 +1804,46 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   }
 
-  const activityCtx=document.getElementById('activityChart').getContext('2d');
-  const activityChart=new Chart(activityCtx,{
-    type:'pie',
-    data:{
-      labels:['Timbrage','Magasinage','Surestarie','Agent (converti)'],
-      datasets:[{
-        data:[35,25,20,20],
-        backgroundColor:['#3498db','#2ecc71','#e74c3c','#f39c12'],
-        borderWidth:2,
-        borderColor:'#fff'
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-            callbacks:{
-              label:function(context){
-                const data=context.dataset.data||[];
-                const value=Number(context.parsed)||0;
-                try{
-                  return `${context.label} ${formatAmount(value)} TND`;
-                }catch(e){
-                  return `${context.label} ${value} TND`;
+  const activityCanvas=document.getElementById('activityChart');
+  let activityChart = null;
+  if(activityCanvas){
+    const activityCtx=activityCanvas.getContext('2d');
+    activityChart=new Chart(activityCtx,{
+      type:'pie',
+      data:{
+        labels:['Timbrage','Magasinage','Surestarie','Agent (converti)'],
+        datasets:[{
+          data:[35,25,20,20],
+          backgroundColor:['#3498db','#2ecc71','#e74c3c','#f39c12'],
+          borderWidth:2,
+          borderColor:'#fff'
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+              callbacks:{
+                label:function(context){
+                  const data=context.dataset.data||[];
+                  const value=Number(context.parsed)||0;
+                  try{
+                    return `${context.label} ${formatAmount(value)} TND`;
+                  }catch(e){
+                    return `${context.label} ${value} TND`;
+                  }
                 }
               }
-            }
+          }
         }
       }
-    }
-  });
+    });
+  }
 
   async function loadActivityData(){
+    if(!activityChart) return;
     try{
       // Prefer using the same monthly datasets as the histogram so values match exactly.
       // If the monthly datasets aren't loaded yet, load them first.

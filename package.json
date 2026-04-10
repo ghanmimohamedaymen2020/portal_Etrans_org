@@ -1,0 +1,6 @@
+{
+  "name": "etrans-portal-restructured-master",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Metadata file to satisfy tooling that expects package.json at project root"
+}

@@ -60,6 +60,35 @@ def create_app(config_name: str | None = None) -> Flask:
             client_translations=get_client_translations(current_lang),
         )
 
+    @app.after_request
+    def audit_authenticated_requests(response):
+        """Journalise les requetes des utilisateurs authentifies (admin + simple user)."""
+        try:
+            from flask_login import current_user
+            from app.utils.audit import log_user_event
+
+            # Exclure bruit technique pour garder des evenements metier lisibles.
+            path = request.path or ""
+            if (
+                current_user.is_authenticated
+                and not path.startswith("/static/")
+                and path not in {"/favicon.ico"}
+                and not path.startswith("/api/admin/summary")
+            ):
+                log_user_event(
+                    event_type="request",
+                    actor_username=current_user.username,
+                    actor_role=(current_user.role.name if current_user.role else "user"),
+                    status=("SUCCESS" if response.status_code < 400 else "FAILED"),
+                    details={
+                        "status_code": response.status_code,
+                        "endpoint": request.endpoint,
+                    },
+                )
+        except Exception:
+            pass
+        return response
+
     # ------------------------------------------------------------------ #
     #  Blueprints                                                         #
     # ------------------------------------------------------------------ #

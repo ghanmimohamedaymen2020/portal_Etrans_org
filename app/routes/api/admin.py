@@ -8,6 +8,7 @@ from sqlalchemy import func
 from app import db
 from app.models.user import Role, User
 from app.routes.api import api_bp
+from app.utils.system_logs import collect_system_logs_details
 
 
 @api_bp.route("/admin/summary", methods=["GET"])
@@ -60,6 +61,7 @@ def admin_summary():
     )
     roles_labels = [r[0] for r in roles_query]
     roles_data = [r[1] for r in roles_query]
+    logs_details = collect_system_logs_details()
 
     return jsonify({
         "total_users":      total_users,
@@ -76,4 +78,5 @@ def admin_summary():
             "labels": roles_labels,
             "data":   roles_data,
         },
+        "system_logs": logs_details,
     })

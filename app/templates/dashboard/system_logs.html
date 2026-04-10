@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Détails Logs Système - E-Trans{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="mb-1"><i class="fas fa-clipboard-list text-primary"></i> Détails complets des logs</h2>
+      <div class="text-muted">Traçabilité des actions utilisateurs/admin + incidents système</div>
+    </div>
+    <a class="btn btn-outline-primary" href="{{ url_for('dashboard.index') }}">
+      <i class="fas fa-arrow-left"></i> Retour Dashboard
+    </a>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Événements Admin</div>
+          <div class="fs-4 fw-bold text-primary">{{ summary.admin_events }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Événements Users</div>
+          <div class="fs-4 fw-bold text-success">{{ summary.user_events }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Erreurs système</div>
+          <div class="fs-4 fw-bold text-danger">{{ summary.errors }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Warnings système</div>
+          <div class="fs-4 fw-bold text-warning">{{ summary.warnings }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label for="event-type-filter" class="form-label mb-1">Type d'événement</label>
+          <select id="event-type-filter" class="form-select form-select-sm">
+            <option value="all">Tous</option>
+            <option value="login">Login / Logout</option>
+            <option value="permissions">Permissions / Rôles</option>
+            <option value="create_user">Create User</option>
+            <option value="errors">Erreurs système</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="username-filter" class="form-label mb-1">Recherche username</label>
+          <input id="username-filter" type="text" class="form-control form-control-sm" placeholder="ex: admin, user2">
+        </div>
+        <div class="col-md-2 d-grid">
+          <button id="clear-filters" type="button" class="btn btn-sm btn-outline-secondary">Réinitialiser</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4" id="audit-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong><i class="fas fa-user-shield text-primary"></i> Journal des événements métier</strong>
+      <span class="badge bg-primary" id="audit-count-badge">{{ audit_events|length }} lignes</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Date/Heure</th>
+              <th>Acteur</th>
+              <th>Rôle</th>
+              <th>Événement</th>
+              <th>Statut</th>
+              <th>Route</th>
+              <th>Détails</th>
+            </tr>
+          </thead>
+          <tbody id="audit-table-body">
+            {% if audit_events %}
+              {% for ev in audit_events %}
+              {% set event_type_l = (ev.event_type or '')|lower %}
+              {% set event_group = 'other' %}
+              {% if 'login' in event_type_l or 'logout' in event_type_l %}
+                {% set event_group = 'login' %}
+              {% elif 'permission' in event_type_l or 'role' in event_type_l %}
+                {% set event_group = 'permissions' %}
+              {% elif 'create_user' in event_type_l %}
+                {% set event_group = 'create_user' %}
+              {% endif %}
+              <tr data-kind="audit" data-event-group="{{ event_group }}" data-event-type="{{ event_type_l }}" data-username="{{ (ev.actor_username or '')|lower }}">
+                <td class="text-nowrap">{{ ev.timestamp }}</td>
+                <td>{{ ev.actor_username }}</td>
+                <td>
+                  {% set role_l = (ev.actor_role or '')|lower %}
+                  <span class="badge {{ 'bg-secondary' if role_l == 'admin' else 'bg-success' }}">
+                    {{ ev.actor_role }}
+                  </span>
+                </td>
+                <td class="text-nowrap">{{ ev.event_type }}</td>
+                <td>
+                  <span class="badge {{ 'bg-danger' if ev.status == 'FAILED' else 'bg-info' }}">{{ ev.status }}</span>
+                </td>
+                <td class="text-nowrap"><code>{{ ev.method }} {{ ev.path }}</code></td>
+                <td>
+                  {% if ev.details %}
+                    <pre class="mb-0" style="max-width:520px; white-space:pre-wrap; font-size:.76rem;">{{ ev.details | tojson(indent=0) }}</pre>
+                  {% else %}
+                    <span class="text-muted">-</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="7" class="text-center text-muted py-4">Aucun événement d'audit pour le moment.</td>
+              </tr>
+            {% endif %}
+            <tr id="audit-empty-row" style="display:none;">
+              <td colspan="7" class="text-center text-muted py-4">Aucun résultat pour les filtres sélectionnés.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm" id="system-card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong><i class="fas fa-exclamation-triangle text-danger"></i> Erreurs et warnings système</strong>
+      <span class="badge bg-danger" id="system-count-badge">{{ system_events|length }} lignes</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Niveau</th>
+              <th>Source</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if system_events %}
+              {% for ev in system_events %}
+              <tr data-kind="system" data-level="{{ (ev.level or '')|lower }}">
+                <td>
+                  <span class="badge {{ 'bg-danger' if ev.level in ['ERROR', 'CRITICAL'] else 'bg-warning text-dark' }}">{{ ev.level }}</span>
+                </td>
+                <td class="text-nowrap"><code>{{ ev.file }}</code></td>
+                <td style="font-size:.85rem;">{{ ev.message }}</td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="3" class="text-center text-muted py-4">Aucune erreur/warning détecté.</td>
+              </tr>
+            {% endif %}
+            <tr id="system-empty-row" style="display:none;">
+              <td colspan="3" class="text-center text-muted py-4">Aucun résultat pour les filtres sélectionnés.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const typeFilter = document.getElementById('event-type-filter');
+  const usernameFilter = document.getElementById('username-filter');
+  const clearBtn = document.getElementById('clear-filters');
+
+  const auditRows = Array.from(document.querySelectorAll('tr[data-kind="audit"]'));
+  const systemRows = Array.from(document.querySelectorAll('tr[data-kind="system"]'));
+  const auditEmptyRow = document.getElementById('audit-empty-row');
+  const systemEmptyRow = document.getElementById('system-empty-row');
+  const auditCountBadge = document.getElementById('audit-count-badge');
+  const systemCountBadge = document.getElementById('system-count-badge');
+
+  function applyFilters() {
+    const selectedType = (typeFilter.value || 'all').toLowerCase();
+    const username = (usernameFilter.value || '').trim().toLowerCase();
+
+    let auditVisible = 0;
+    let systemVisible = 0;
+
+    auditRows.forEach((row) => {
+      const group = (row.dataset.eventGroup || 'other').toLowerCase();
+      const actor = (row.dataset.username || '').toLowerCase();
+
+      const typeOk = selectedType === 'all' ? true : (selectedType === 'errors' ? false : group === selectedType);
+      const userOk = !username || actor.includes(username);
+
+      const show = typeOk && userOk;
+      row.style.display = show ? '' : 'none';
+      if (show) auditVisible += 1;
+    });
+
+    systemRows.forEach((row) => {
+      const show = selectedType === 'all' || selectedType === 'errors';
+      row.style.display = show ? '' : 'none';
+      if (show) systemVisible += 1;
+    });
+
+    if (auditEmptyRow) auditEmptyRow.style.display = auditVisible === 0 ? '' : 'none';
+    if (systemEmptyRow) systemEmptyRow.style.display = systemVisible === 0 ? '' : 'none';
+
+    if (auditCountBadge) auditCountBadge.textContent = `${auditVisible} lignes`;
+    if (systemCountBadge) systemCountBadge.textContent = `${systemVisible} lignes`;
+  }
+
+  if (typeFilter) typeFilter.addEventListener('change', applyFilters);
+  if (usernameFilter) usernameFilter.addEventListener('input', applyFilters);
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      typeFilter.value = 'all';
+      usernameFilter.value = '';
+      applyFilters();
+    });
+  }
+
+  applyFilters();
+});
+</script>
+{% endblock %}
